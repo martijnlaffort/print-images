@@ -10,11 +10,14 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
-use Imagick;
+use Illuminate\Support\Facades\Process;
+use RuntimeException;
 
 class GenerateSizeVariants implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
+
+    public int $timeout = 300;
 
     public function __construct(
         public Poster $poster,
@@ -23,37 +26,49 @@ class GenerateSizeVariants implements ShouldQueue
         public string $namingPattern = '{title}_{size}.png',
     ) {}
 
+    private function getMagickPath(): string
+    {
+        return match (PHP_OS_FAMILY) {
+            'Windows' => 'C:\\Program Files\\ImageMagick-7.1.2-Q16\\magick.exe',
+            default => 'magick',
+        };
+    }
+
     public function handle(NamingService $namingService): void
     {
         if (! is_dir($this->outputDir)) {
             mkdir($this->outputDir, 0755, true);
         }
 
+        $magick = $this->getMagickPath();
         $sourcePath = $this->poster->upscaled_path ?? $this->poster->original_path;
 
+        $dpiValidator = new DpiValidator();
+
         foreach ($this->sizes as $sizeName) {
-            $pixels = DpiValidator::PIXELS_AT_300DPI[$sizeName] ?? null;
+            $pixels = $dpiValidator->pixelsAt300Dpi($sizeName);
             if (! $pixels) {
                 continue;
             }
 
-            $image = new Imagick($sourcePath);
-            $image->resizeImage(
-                $pixels['width'],
-                $pixels['height'],
-                Imagick::FILTER_LANCZOS,
-                1,
-                true
-            );
-
-            $image->setImageResolution(300, 300);
-            $image->setImageUnits(Imagick::RESOLUTION_PIXELSPERINCH);
-
             $filename = $namingService->sizeVariantName($this->poster->slug, $sizeName);
             $outputPath = rtrim($this->outputDir, '/\\') . '/' . $filename;
 
-            $image->writeImage($outputPath);
-            $image->destroy();
+            $result = Process::timeout(120)->run([
+                $magick,
+                $sourcePath,
+                '-filter', 'Lanczos',
+                '-resize', "{$pixels['width']}x{$pixels['height']}",
+                '-density', '300',
+                '-units', 'PixelsPerInch',
+                $outputPath,
+            ]);
+
+            if ($result->failed()) {
+                throw new RuntimeException(
+                    "Failed to generate size variant {$sizeName}: " . $result->errorOutput()
+                );
+            }
         }
     }
 }

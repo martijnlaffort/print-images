@@ -35,7 +35,7 @@
         <div>
             <h2 class="mb-3 text-sm font-semibold text-gray-700 uppercase tracking-wide">Print Sizes</h2>
             <div class="rounded-lg bg-white border border-gray-200 p-4 space-y-3">
-                @foreach($availableSizes as $size)
+                @foreach($availableSizes as $size => $dims)
                     <label class="flex items-center gap-3 cursor-pointer">
                         <input
                             type="checkbox"
@@ -45,9 +45,6 @@
                         >
                         <span class="text-sm font-medium text-gray-900">{{ $size }}</span>
                         <span class="text-xs text-gray-500">
-                            @php
-                                $dims = \App\Services\DpiValidator::SIZES[$size];
-                            @endphp
                             {{ $dims['width_cm'] }} x {{ $dims['height_cm'] }} cm
                         </span>
                     </label>
@@ -56,9 +53,13 @@
                 @if(count($selectedPosters) > 0)
                     <button
                         wire:click="validateDpi"
-                        class="mt-3 w-full rounded bg-gray-100 px-3 py-2 text-xs font-medium text-gray-700 hover:bg-gray-200"
+                        wire:loading.attr="disabled"
+                        wire:target="validateDpi"
+                        class="mt-3 w-full inline-flex items-center justify-center gap-1.5 rounded bg-gray-100 px-3 py-2 text-xs font-medium text-gray-700 hover:bg-gray-200 disabled:opacity-50"
                     >
-                        Check DPI
+                        <x-spinner wire:loading wire:target="validateDpi" class="h-3 w-3" />
+                        <span wire:loading.remove wire:target="validateDpi">Check DPI</span>
+                        <span wire:loading wire:target="validateDpi">Checking...</span>
                     </button>
                 @endif
             </div>
@@ -116,8 +117,15 @@
                 <div>
                     <label class="block text-sm font-medium text-gray-700 mb-1">Output Folder</label>
                     <div class="flex gap-2">
-                        <input type="text" wire:model="outputDir" class="flex-1 rounded-lg border-gray-300 text-sm focus:border-green-500 focus:ring-green-500" readonly>
-                        <button wire:click="selectOutputDir" class="shrink-0 rounded-lg bg-gray-100 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-200">
+                        <input type="text" wire:model="outputDir" class="flex-1 rounded-lg border-gray-300 text-sm focus:border-green-500 focus:ring-green-500">
+                        <button
+                            type="button"
+                            wire:click="selectOutputDir"
+                            wire:loading.attr="disabled"
+                            wire:target="selectOutputDir"
+                            class="shrink-0 inline-flex items-center gap-1.5 rounded-lg bg-gray-100 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-200 disabled:opacity-50"
+                        >
+                            <x-spinner wire:loading wire:target="selectOutputDir" class="h-3 w-3" />
                             Browse
                         </button>
                     </div>
@@ -125,19 +133,15 @@
 
                 <button
                     wire:click="exportAll"
+                    wire:loading.attr="disabled"
+                    wire:target="exportAll"
                     @disabled(empty($selectedPosters) || empty($selectedSizes))
-                    class="w-full rounded-lg bg-green-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                    class="w-full inline-flex items-center justify-center gap-2 rounded-lg bg-green-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                    @if($exporting)
-                        Exporting...
-                    @else
-                        Export All
-                    @endif
+                    <x-spinner wire:loading wire:target="exportAll" />
+                    <span wire:loading.remove wire:target="exportAll">Export All</span>
+                    <span wire:loading wire:target="exportAll">Exporting...</span>
                 </button>
-
-                @if($exporting)
-                    <p class="text-center text-sm text-green-600">Export jobs queued successfully!</p>
-                @endif
             </div>
         </div>
     </div>

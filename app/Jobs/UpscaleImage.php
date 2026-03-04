@@ -15,10 +15,13 @@ class UpscaleImage implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
+    public int $timeout = 600;
+
     public function __construct(
         public Poster $poster,
         public int $scale = 4,
         public string $model = 'realesrgan-x4plus',
+        public int $denoise = 50,
     ) {}
 
     public function handle(UpscaleService $upscaleService, NamingService $namingService): void
@@ -36,6 +39,7 @@ class UpscaleImage implements ShouldQueue
             $outputPath,
             $this->scale,
             $this->model,
+            $this->denoise,
         );
 
         $this->poster->update([

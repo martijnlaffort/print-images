@@ -3,6 +3,7 @@
 namespace App\Livewire;
 
 use App\Models\Poster;
+use Livewire\Attributes\Validate;
 use Livewire\Component;
 use Livewire\WithFileUploads;
 use Illuminate\Support\Str;
@@ -11,6 +12,7 @@ class Dashboard extends Component
 {
     use WithFileUploads;
 
+    #[Validate(['photos.*' => 'file|mimes:jpg,jpeg,png,webp|max:102400'])]
     public $photos = [];
     public $search = '';
     public $selected = [];
@@ -18,6 +20,8 @@ class Dashboard extends Component
 
     public function updatedPhotos(): void
     {
+        $this->validate();
+        $count = 0;
         foreach ($this->photos as $photo) {
             $filename = pathinfo($photo->getClientOriginalName(), PATHINFO_FILENAME);
             $extension = $photo->getClientOriginalExtension();
@@ -33,9 +37,11 @@ class Dashboard extends Component
             copy($photo->getRealPath(), $fullPath);
 
             Poster::createFromImport($fullPath);
+            $count++;
         }
 
         $this->photos = [];
+        $this->dispatch('toast', type: 'success', message: "{$count} poster(s) imported.");
     }
 
     public function importViaDialog(): void
@@ -48,15 +54,17 @@ class Dashboard extends Component
                 ->open();
 
             if ($files) {
+                $count = 0;
                 foreach ((array) $files as $file) {
                     if (file_exists($file)) {
                         Poster::createFromImport($file);
+                        $count++;
                     }
                 }
+                $this->dispatch('toast', type: 'success', message: "{$count} poster(s) imported.");
             }
         } catch (\Throwable) {
-            // NativePHP dialog not available (dev mode without Electron)
-            // File upload via drag-and-drop still works
+            $this->dispatch('toast', type: 'error', message: 'Import dialog not available. Use drag-and-drop instead.');
         }
     }
 
@@ -67,13 +75,16 @@ class Dashboard extends Component
             $poster->delete();
         }
         $this->selected = array_values(array_diff($this->selected, [$id]));
+        $this->dispatch('toast', type: 'success', message: 'Poster deleted.');
     }
 
     public function deleteSelected(): void
     {
+        $count = count($this->selected);
         Poster::whereIn('id', $this->selected)->delete();
         $this->selected = [];
         $this->selectAll = false;
+        $this->dispatch('toast', type: 'success', message: "{$count} poster(s) deleted.");
     }
 
     public function updatedSelectAll(): void

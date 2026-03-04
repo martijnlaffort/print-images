@@ -106,6 +106,7 @@ class TemplateEditor extends Component
             MockupTemplate::create($data);
         }
 
+        $this->dispatch('toast', type: 'success', message: 'Template saved.');
         $this->redirect('/templates', navigate: true);
     }
 

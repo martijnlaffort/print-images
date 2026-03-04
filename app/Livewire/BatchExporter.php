@@ -4,6 +4,7 @@ namespace App\Livewire;
 
 use App\Jobs\GenerateSizeVariants;
 use App\Models\Poster;
+use App\Models\Setting;
 use App\Services\DpiValidator;
 use Livewire\Component;
 
@@ -14,26 +15,27 @@ class BatchExporter extends Component
     public string $outputDir = '';
     public string $namingPattern = '{title}_{size}.png';
     public array $dpiResults = [];
-    public bool $exporting = false;
 
     public function mount(): void
     {
-        $this->outputDir = storage_path('app/exports');
+        $this->outputDir = Setting::get('export.default_dir', storage_path('app/exports'));
+        $this->namingPattern = Setting::get('naming.size_variant', config('posterforge.naming.size_variant', '{title}_{size}.png'));
     }
 
     public function selectOutputDir(): void
     {
+        logger()->info('selectOutputDir called');
         try {
-            $dir = \Native\Laravel\Facades\Dialog::new()
+            $dir = \Native\Laravel\Dialog::new()
                 ->title('Select export folder')
-                ->asSheet()
-                ->openDirectory();
+                ->folders()
+                ->open();
 
             if ($dir) {
                 $this->outputDir = $dir;
             }
-        } catch (\Throwable) {
-            // Fallback if NativePHP dialog not available
+        } catch (\Throwable $e) {
+            logger()->error('Dialog error: ' . $e->getMessage());
         }
     }
 
@@ -50,6 +52,8 @@ class BatchExporter extends Component
                 $this->dpiResults[$poster->id] = $validator->validateAll($imagePath);
             }
         }
+
+        $this->dispatch('toast', type: 'info', message: 'DPI validation complete.');
     }
 
     public function exportAll(): void
@@ -66,8 +70,9 @@ class BatchExporter extends Component
 
         $posters = Poster::whereIn('id', $this->selectedPosters)->get();
 
+        $count = 0;
         foreach ($posters as $poster) {
-            GenerateSizeVariants::dispatch(
+            GenerateSizeVariants::dispatchSync(
                 $poster,
                 $this->selectedSizes,
                 $outputDir,
@@ -75,9 +80,10 @@ class BatchExporter extends Component
             );
 
             $poster->update(['status' => 'exported']);
+            $count++;
         }
 
-        $this->exporting = true;
+        $this->dispatch('toast', type: 'success', message: "Exported {$count} poster(s).");
     }
 
     public function getPostersProperty()
@@ -91,7 +97,7 @@ class BatchExporter extends Component
     {
         return view('livewire.batch-exporter', [
             'posters' => $this->posters,
-            'availableSizes' => DpiValidator::sizeNames(),
+            'availableSizes' => (new DpiValidator())->allSizes(),
         ]);
     }
 }

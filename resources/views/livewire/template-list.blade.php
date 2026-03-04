@@ -42,9 +42,13 @@
                             <button
                                 wire:click="deleteTemplate({{ $template->id }})"
                                 wire:confirm="Delete this template?"
-                                class="rounded bg-red-50 px-3 py-1 text-xs font-medium text-red-700 hover:bg-red-100"
+                                wire:loading.attr="disabled"
+                                wire:target="deleteTemplate({{ $template->id }})"
+                                class="inline-flex items-center gap-1 rounded bg-red-50 px-3 py-1 text-xs font-medium text-red-700 hover:bg-red-100 disabled:opacity-50"
                             >
-                                Delete
+                                <x-spinner wire:loading wire:target="deleteTemplate({{ $template->id }})" class="h-3 w-3" />
+                                <span wire:loading.remove wire:target="deleteTemplate({{ $template->id }})">Delete</span>
+                                <span wire:loading wire:target="deleteTemplate({{ $template->id }})">Deleting...</span>
                             </button>
                         </div>
                     </div>

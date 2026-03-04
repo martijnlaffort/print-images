@@ -3,6 +3,7 @@
 namespace App\Livewire;
 
 use App\Jobs\GenerateMockup;
+use App\Models\GeneratedMockup;
 use App\Models\MockupTemplate;
 use App\Models\Poster;
 use Livewire\Component;
@@ -19,8 +20,10 @@ class MockupGenerator extends Component
         $posters = Poster::whereIn('id', $this->selectedPosters)->get();
 
         foreach ($posters as $poster) {
-            GenerateMockup::dispatch($poster, $template);
+            GenerateMockup::dispatchSync($poster, $template);
         }
+
+        $this->dispatch('toast', type: 'success', message: "Generated {$posters->count()} mockup(s).");
     }
 
     public function generateAll(): void
@@ -30,11 +33,15 @@ class MockupGenerator extends Component
             ->when($this->categoryFilter, fn ($q) => $q->where('category', $this->categoryFilter))
             ->get();
 
+        $count = 0;
         foreach ($posters as $poster) {
             foreach ($templates as $template) {
-                GenerateMockup::dispatch($poster, $template);
+                GenerateMockup::dispatchSync($poster, $template);
+                $count++;
             }
         }
+
+        $this->dispatch('toast', type: 'success', message: "Generated {$count} mockup(s).");
     }
 
     public function selectTemplate(int $id): void
@@ -62,12 +69,31 @@ class MockupGenerator extends Component
         return MockupTemplate::distinct()->pluck('category')->toArray();
     }
 
+    public function getMockupsProperty()
+    {
+        return GeneratedMockup::with(['poster', 'template'])
+            ->orderByDesc('created_at')
+            ->limit(50)
+            ->get();
+    }
+
+    public function deleteMockup(int $id): void
+    {
+        $mockup = GeneratedMockup::findOrFail($id);
+        if (file_exists($mockup->output_path)) {
+            @unlink($mockup->output_path);
+        }
+        $mockup->delete();
+        $this->dispatch('toast', type: 'success', message: 'Mockup deleted.');
+    }
+
     public function render()
     {
         return view('livewire.mockup-generator', [
             'posters' => $this->posters,
             'templates' => $this->templates,
             'categories' => $this->categories,
+            'mockups' => $this->mockups,
         ]);
     }
 }

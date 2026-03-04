@@ -2,6 +2,8 @@
 
 namespace App\Services;
 
+use App\Models\Setting;
+
 class DpiValidator
 {
     const SIZES = [
@@ -20,11 +22,57 @@ class DpiValidator
         '30x40' => ['width' => 3543, 'height' => 4724],
     ];
 
+    public function allSizes(): array
+    {
+        $sizes = self::SIZES;
+
+        $custom = Setting::get('print_sizes', []);
+        foreach ($custom as $size) {
+            $sizes[$size['name']] = [
+                'width_cm' => (float) $size['width_cm'],
+                'height_cm' => (float) $size['height_cm'],
+            ];
+        }
+
+        return $sizes;
+    }
+
+    public function pixelsAt300Dpi(string $sizeName): ?array
+    {
+        if (isset(self::PIXELS_AT_300DPI[$sizeName])) {
+            return self::PIXELS_AT_300DPI[$sizeName];
+        }
+
+        $sizes = $this->allSizes();
+        if (! isset($sizes[$sizeName])) {
+            return null;
+        }
+
+        $spec = $sizes[$sizeName];
+
+        return [
+            'width' => (int) round($spec['width_cm'] / 2.54 * 300),
+            'height' => (int) round($spec['height_cm'] / 2.54 * 300),
+        ];
+    }
+
     public function validate(string $imagePath, string $size, int $minDpi = 150): array
     {
         [$pixelW, $pixelH] = getimagesize($imagePath);
 
-        $sizeSpec = self::SIZES[$size];
+        $sizes = $this->allSizes();
+        $sizeSpec = $sizes[$size] ?? self::SIZES[$size] ?? null;
+
+        if (! $sizeSpec) {
+            return [
+                'size' => $size,
+                'pixel_width' => $pixelW,
+                'pixel_height' => $pixelH,
+                'effective_dpi' => 0,
+                'meets_minimum' => false,
+                'meets_recommended' => false,
+            ];
+        }
 
         $dpiW = $pixelW / ($sizeSpec['width_cm'] / 2.54);
         $dpiH = $pixelH / ($sizeSpec['height_cm'] / 2.54);
@@ -43,7 +91,7 @@ class DpiValidator
     public function validateAll(string $imagePath, int $minDpi = 150): array
     {
         $results = [];
-        foreach (array_keys(self::SIZES) as $size) {
+        foreach (array_keys($this->allSizes()) as $size) {
             $results[$size] = $this->validate($imagePath, $size, $minDpi);
         }
 

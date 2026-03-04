@@ -182,9 +182,13 @@
 
                 <button
                     wire:click="saveTemplate"
-                    class="w-full rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
+                    wire:loading.attr="disabled"
+                    wire:target="saveTemplate"
+                    class="w-full inline-flex items-center justify-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
                 >
-                    {{ $templateId ? 'Update Template' : 'Save Template' }}
+                    <x-spinner wire:loading wire:target="saveTemplate" />
+                    <span wire:loading.remove wire:target="saveTemplate">{{ $templateId ? 'Update Template' : 'Save Template' }}</span>
+                    <span wire:loading wire:target="saveTemplate">Saving...</span>
                 </button>
             </div>
         </div>

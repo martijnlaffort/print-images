@@ -1,7 +1,14 @@
-<div>
+<div @if($processing) wire:poll.3s="checkJobStatus" @endif>
     <div class="flex items-center justify-between mb-6">
         <h1 class="text-2xl font-bold text-gray-900">Upscale Queue</h1>
     </div>
+
+    @if($processing)
+        <div class="mb-6 flex items-center gap-3 rounded-lg bg-indigo-50 border border-indigo-200 px-4 py-3">
+            <x-spinner class="h-5 w-5 text-indigo-600" />
+            <span class="text-sm font-medium text-indigo-700">Upscaling in progress...</span>
+        </div>
+    @endif
 
     @if(!$binaryAvailable)
         <div class="mb-6 rounded-lg bg-amber-50 border border-amber-200 p-4">
@@ -34,19 +41,30 @@
         <div>
             <label class="block text-sm font-medium text-gray-700 mb-1">Scale Factor</label>
             <select wire:model="scale" class="rounded-lg border-gray-300 text-sm focus:border-indigo-500 focus:ring-indigo-500">
-                <option value="2">2x</option>
-                <option value="3">3x</option>
                 <option value="4">4x</option>
             </select>
+        </div>
+        <div class="min-w-48">
+            <label class="block text-sm font-medium text-gray-700 mb-1">Denoise Strength: {{ $denoise }}%</label>
+            <input type="range" wire:model.live="denoise" min="0" max="100" step="10"
+                class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-indigo-600">
+            <div class="flex justify-between text-xs text-gray-400 mt-0.5">
+                <span>Sharp</span>
+                <span>Smooth</span>
+            </div>
         </div>
         <div class="ml-auto flex gap-2">
             @if(count($selected) > 0)
                 <button
                     wire:click="startUpscale"
+                    wire:loading.attr="disabled"
+                    wire:target="startUpscale"
                     @disabled(!$binaryAvailable)
-                    class="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                    class="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                    Upscale Selected ({{ count($selected) }})
+                    <x-spinner wire:loading wire:target="startUpscale" />
+                    <span wire:loading.remove wire:target="startUpscale">Upscale Selected ({{ count($selected) }})</span>
+                    <span wire:loading wire:target="startUpscale">Queuing...</span>
                 </button>
             @endif
         </div>
@@ -95,9 +113,13 @@
                 @if($poster->status === 'imported' && $binaryAvailable)
                     <button
                         wire:click="upscaleSingle({{ $poster->id }})"
-                        class="rounded bg-indigo-100 px-3 py-1 text-xs font-medium text-indigo-700 hover:bg-indigo-200"
+                        wire:loading.attr="disabled"
+                        wire:target="upscaleSingle({{ $poster->id }})"
+                        class="inline-flex items-center gap-1.5 rounded bg-indigo-100 px-3 py-1 text-xs font-medium text-indigo-700 hover:bg-indigo-200 disabled:opacity-50"
                     >
-                        Upscale
+                        <x-spinner wire:loading wire:target="upscaleSingle({{ $poster->id }})" class="h-3 w-3" />
+                        <span wire:loading.remove wire:target="upscaleSingle({{ $poster->id }})">Upscale</span>
+                        <span wire:loading wire:target="upscaleSingle({{ $poster->id }})">Queuing...</span>
                     </button>
                 @endif
             </div>

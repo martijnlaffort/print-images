@@ -10,9 +10,13 @@
             >
             <button
                 wire:click="importViaDialog"
-                class="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
+                wire:loading.attr="disabled"
+                wire:target="importViaDialog"
+                class="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
             >
-                Import Files
+                <x-spinner wire:loading wire:target="importViaDialog" />
+                <span wire:loading.remove wire:target="importViaDialog">Import Files</span>
+                <span wire:loading wire:target="importViaDialog">Importing...</span>
             </button>
         </div>
     </div>
@@ -29,8 +33,16 @@
             <a href="/export" class="rounded bg-green-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-green-700" wire:navigate>
                 Export
             </a>
-            <button wire:click="deleteSelected" wire:confirm="Delete selected posters?" class="rounded bg-red-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-700 ml-auto">
-                Delete Selected
+            <button
+                wire:click="deleteSelected"
+                wire:confirm="Delete selected posters?"
+                wire:loading.attr="disabled"
+                wire:target="deleteSelected"
+                class="inline-flex items-center gap-1.5 rounded bg-red-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-700 ml-auto disabled:opacity-50"
+            >
+                <x-spinner wire:loading wire:target="deleteSelected" class="h-3 w-3" />
+                <span wire:loading.remove wire:target="deleteSelected">Delete Selected</span>
+                <span wire:loading wire:target="deleteSelected">Deleting...</span>
             </button>
         </div>
     @endif
@@ -61,7 +73,11 @@
             <p class="mt-1 text-sm text-gray-500">or use the Import button above</p>
             <p class="mt-1 text-xs text-gray-400">Supports JPG, PNG, WebP</p>
 
-            <label class="mt-6 cursor-pointer rounded-lg bg-white border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">
+            <div wire:loading wire:target="photos" class="mt-4 inline-flex items-center gap-2 text-sm text-indigo-600">
+                <x-spinner class="h-4 w-4" /> Uploading...
+            </div>
+
+            <label wire:loading.remove wire:target="photos" class="mt-6 cursor-pointer rounded-lg bg-white border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">
                 Browse Files
                 <input type="file" wire:model="photos" multiple accept="image/*" class="hidden">
             </label>
@@ -91,7 +107,10 @@
             class="mb-6 rounded-lg border-2 border-dashed p-4 text-center transition-colors"
             :class="dragging ? 'border-indigo-500 bg-indigo-50' : 'border-gray-200 bg-gray-50'"
         >
-            <label class="cursor-pointer text-sm text-gray-500 hover:text-indigo-600">
+            <div wire:loading wire:target="photos" class="inline-flex items-center gap-2 text-sm text-indigo-600">
+                <x-spinner class="h-4 w-4" /> Uploading...
+            </div>
+            <label wire:loading.remove wire:target="photos" class="cursor-pointer text-sm text-gray-500 hover:text-indigo-600">
                 Drop more images here or <span class="font-medium text-indigo-600 underline">browse</span>
                 <input type="file" wire:model="photos" multiple accept="image/*" class="hidden">
             </label>
@@ -139,9 +158,12 @@
                             <button
                                 wire:click="deletePoster({{ $poster->id }})"
                                 wire:confirm="Delete this poster?"
-                                class="text-gray-400 opacity-0 transition-opacity hover:text-red-500 group-hover:opacity-100"
+                                wire:loading.attr="disabled"
+                                wire:target="deletePoster({{ $poster->id }})"
+                                class="text-gray-400 opacity-0 transition-opacity hover:text-red-500 group-hover:opacity-100 disabled:opacity-50"
                             >
-                                <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <x-spinner wire:loading wire:target="deletePoster({{ $poster->id }})" class="h-4 w-4" />
+                                <svg wire:loading.remove wire:target="deletePoster({{ $poster->id }})" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                                 </svg>
                             </button>

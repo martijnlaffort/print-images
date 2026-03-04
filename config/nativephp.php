@@ -144,8 +144,8 @@ return [
     'queue_workers' => [
         'default' => [
             'queues' => ['default'],
-            'memory_limit' => 128,
-            'timeout' => 60,
+            'memory_limit' => 256,
+            'timeout' => 600,
             'sleep' => 3,
         ],
     ],
