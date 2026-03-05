@@ -13,6 +13,7 @@ class UpscaleService
         int $scale = 4,
         string $model = 'realesrgan-x4plus',
         int $denoise = 50,
+        int $tileSize = 0,
     ): string {
         $binary = $this->getBinaryPath();
         $magick = $this->getMagickPath();
@@ -21,14 +22,21 @@ class UpscaleService
 
         try {
             // Step 1: AI upscale
-            $result = Process::timeout(300)->run([
+            $cmd = [
                 $binary,
                 '-i', $inputPath,
                 '-o', $denoise > 0 ? $aiOutput : $outputPath,
                 '-s', (string) $scale,
                 '-n', $model,
                 '-f', 'png',
-            ]);
+            ];
+
+            if ($tileSize > 0) {
+                $cmd[] = '-t';
+                $cmd[] = (string) $tileSize;
+            }
+
+            $result = Process::timeout(300)->run($cmd);
 
             if ($result->failed()) {
                 throw new RuntimeException(
@@ -82,6 +90,103 @@ class UpscaleService
         }
     }
 
+    /**
+     * Smart upscale: target specific pixel dimensions with multi-pass and post-processing.
+     */
+    public function smartUpscale(
+        string $inputPath,
+        string $outputPath,
+        int $targetWidth,
+        int $targetHeight,
+        string $model = 'realesrgan-x4plus',
+        int $denoise = 50,
+        int $sharpen = 0,
+        array $colorAdjust = [],
+        int $tileSize = 0,
+    ): string {
+        $magick = $this->getMagickPath();
+        [$origWidth, $origHeight] = $this->getImageDimensions($inputPath);
+
+        // Calculate required scale factor (use the larger dimension ratio)
+        $scaleW = $targetWidth / $origWidth;
+        $scaleH = $targetHeight / $origHeight;
+        $requiredScale = max($scaleW, $scaleH);
+
+        // If image already meets target, just resize to exact dimensions
+        if ($requiredScale <= 1.0) {
+            $this->resizeToExact($inputPath, $outputPath, $targetWidth, $targetHeight);
+            return $outputPath;
+        }
+
+        $tempDir = sys_get_temp_dir();
+        $currentInput = $inputPath;
+        $tempFiles = [];
+
+        try {
+            // Multi-pass upscaling: Real-ESRGAN supports max 4x per pass
+            $remainingScale = $requiredScale;
+            $pass = 0;
+
+            while ($remainingScale > 1.0) {
+                $passScale = min(4, (int) ceil($remainingScale));
+                // For small remaining scales (1.x - 2.x), still use 4x then resize down
+                // This produces better quality than trying fractional scales
+                if ($passScale < 2) {
+                    $passScale = 2;
+                }
+                // Real-ESRGAN only supports 4x and 2x for most models
+                if ($passScale > 2 && $passScale < 4) {
+                    $passScale = 4;
+                }
+
+                $passOutput = $tempDir . '/upscale_pass_' . $pass . '_' . uniqid() . '.png';
+                $tempFiles[] = $passOutput;
+
+                $isLastPass = ($remainingScale / $passScale) <= 1.0;
+
+                $this->upscale(
+                    $currentInput,
+                    $passOutput,
+                    $passScale,
+                    $model,
+                    $isLastPass ? $denoise : 0, // Only blend on final pass
+                    $tileSize,
+                );
+
+                $currentInput = $passOutput;
+                $remainingScale = $remainingScale / $passScale;
+                $pass++;
+            }
+
+            // Final resize to exact target dimensions with Lanczos
+            $preSharpPath = ($sharpen > 0)
+                ? $tempDir . '/upscale_presharp_' . uniqid() . '.png'
+                : $outputPath;
+
+            if ($sharpen > 0) {
+                $tempFiles[] = $preSharpPath;
+            }
+
+            $this->resizeToExact($currentInput, $preSharpPath, $targetWidth, $targetHeight);
+
+            // Optional sharpening
+            if ($sharpen > 0) {
+                $this->applySharpen($preSharpPath, $outputPath, $sharpen);
+            }
+
+            // Optional color adjustment
+            if (! empty($colorAdjust)) {
+                $this->applyColorAdjust($outputPath, $outputPath, $colorAdjust);
+            }
+
+            return $outputPath;
+        } finally {
+            foreach ($tempFiles as $tempFile) {
+                @unlink($tempFile);
+            }
+        }
+    }
+
     public function batchUpscale(
         string $inputDir,
         string $outputDir,
@@ -108,6 +213,16 @@ class UpscaleService
         return $outputDir;
     }
 
+    public function getImageDimensions(string $path): array
+    {
+        $info = @getimagesize($path);
+        if ($info === false) {
+            throw new RuntimeException("Cannot read image dimensions: {$path}");
+        }
+
+        return [(int) $info[0], (int) $info[1]];
+    }
+
     public function getBinaryPath(): string
     {
         $platform = PHP_OS_FAMILY;
@@ -131,5 +246,74 @@ class UpscaleService
             'Windows' => 'C:\\Program Files\\ImageMagick-7.1.2-Q16\\magick.exe',
             default => 'magick',
         };
+    }
+
+    private function resizeToExact(string $input, string $output, int $width, int $height): void
+    {
+        $magick = $this->getMagickPath();
+
+        $result = Process::timeout(120)->run([
+            $magick, $input,
+            '-filter', 'Lanczos',
+            '-resize', "{$width}x{$height}!",
+            '-density', '300',
+            '-units', 'PixelsPerInch',
+            $output,
+        ]);
+
+        if ($result->failed()) {
+            throw new RuntimeException('Resize failed: ' . $result->errorOutput());
+        }
+    }
+
+    private function applyColorAdjust(string $input, string $output, array $adjust): void
+    {
+        $magick = $this->getMagickPath();
+
+        $brightness = $adjust['brightness'] ?? 100;
+        $contrast = $adjust['contrast'] ?? 0;
+        $saturation = $adjust['saturation'] ?? 100;
+
+        $cmd = [$magick, $input];
+
+        // Brightness and saturation via -modulate (brightness, saturation, hue)
+        if ($brightness !== 100 || $saturation !== 100) {
+            $cmd[] = '-modulate';
+            $cmd[] = "{$brightness},{$saturation},100";
+        }
+
+        // Contrast via -brightness-contrast
+        if ($contrast !== 0) {
+            $cmd[] = '-brightness-contrast';
+            $cmd[] = "0x{$contrast}";
+        }
+
+        $cmd[] = $output;
+
+        $result = Process::timeout(120)->run($cmd);
+        if ($result->failed()) {
+            throw new RuntimeException('Color adjust failed: ' . $result->errorOutput());
+        }
+    }
+
+    private function applySharpen(string $input, string $output, int $strength): void
+    {
+        $magick = $this->getMagickPath();
+
+        // USM: radiusxsigma+gain+threshold
+        // Scale strength 1-100 to reasonable USM values
+        $sigma = round(0.5 + ($strength / 100) * 1.0, 2); // 0.5 - 1.5
+        $gain = round(0.5 + ($strength / 100) * 1.0, 2);  // 0.5 - 1.5
+        $threshold = '0.02';
+
+        $result = Process::timeout(120)->run([
+            $magick, $input,
+            '-unsharp', "0x{$sigma}+{$gain}+{$threshold}",
+            $output,
+        ]);
+
+        if ($result->failed()) {
+            throw new RuntimeException('Sharpen failed: ' . $result->errorOutput());
+        }
     }
 }

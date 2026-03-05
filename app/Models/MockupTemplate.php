@@ -28,4 +28,31 @@ class MockupTemplate extends Model
     {
         return $this->hasMany(GeneratedMockup::class, 'template_id');
     }
+
+    public function slots(): HasMany
+    {
+        return $this->hasMany(TemplateSlot::class, 'template_id')->orderBy('sort_order');
+    }
+
+    /**
+     * Get all placement areas: slots if any exist, otherwise fall back to the legacy corners field.
+     */
+    public function getAllSlots(): array
+    {
+        $slots = $this->slots;
+
+        if ($slots->isNotEmpty()) {
+            return $slots->map(fn ($s) => [
+                'label' => $s->label,
+                'corners' => $s->corners,
+                'aspect_ratio' => $s->aspect_ratio,
+            ])->toArray();
+        }
+
+        return [[
+            'label' => 'Main',
+            'corners' => $this->corners,
+            'aspect_ratio' => $this->aspect_ratio,
+        ]];
+    }
 }

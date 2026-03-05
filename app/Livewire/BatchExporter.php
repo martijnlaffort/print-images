@@ -14,6 +14,8 @@ class BatchExporter extends Component
     public array $selectedSizes = ['A4', 'A3'];
     public string $outputDir = '';
     public string $namingPattern = '{title}_{size}.png';
+    public string $outputFormat = 'png';
+    public int $outputQuality = 92;
     public array $dpiResults = [];
 
     public function mount(): void
@@ -24,7 +26,6 @@ class BatchExporter extends Component
 
     public function selectOutputDir(): void
     {
-        logger()->info('selectOutputDir called');
         try {
             $dir = \Native\Laravel\Dialog::new()
                 ->title('Select export folder')
@@ -68,6 +69,10 @@ class BatchExporter extends Component
             mkdir($outputDir, 0755, true);
         }
 
+        // Adjust naming pattern extension to match format
+        $ext = $this->outputFormat === 'jpg' ? 'jpg' : 'png';
+        $pattern = preg_replace('/\.\w+$/', ".{$ext}", $this->namingPattern);
+
         $posters = Poster::whereIn('id', $this->selectedPosters)->get();
 
         $count = 0;
@@ -76,7 +81,7 @@ class BatchExporter extends Component
                 $poster,
                 $this->selectedSizes,
                 $outputDir,
-                $this->namingPattern,
+                $pattern,
             );
 
             $poster->update(['status' => 'exported']);
@@ -84,6 +89,47 @@ class BatchExporter extends Component
         }
 
         $this->dispatch('toast', type: 'success', message: "Exported {$count} poster(s).");
+    }
+
+    public function downloadZip(): void
+    {
+        $outputDir = $this->outputDir ?: storage_path('app/exports');
+
+        if (! is_dir($outputDir)) {
+            $this->dispatch('toast', type: 'error', message: 'No exports found.');
+            return;
+        }
+
+        $zipPath = storage_path('app/exports/exports_' . now()->format('Y-m-d_His') . '.zip');
+        $zip = new \ZipArchive();
+
+        if ($zip->open($zipPath, \ZipArchive::CREATE) !== true) {
+            $this->dispatch('toast', type: 'error', message: 'Failed to create ZIP file.');
+            return;
+        }
+
+        $posters = Poster::whereIn('id', $this->selectedPosters)->get();
+        $count = 0;
+
+        foreach ($posters as $poster) {
+            $pattern = $poster->slug . '_*';
+            $files = glob($outputDir . '/' . $pattern);
+            foreach ($files as $file) {
+                $zip->addFile($file, basename($file));
+                $count++;
+            }
+        }
+
+        $zip->close();
+
+        if ($count === 0) {
+            @unlink($zipPath);
+            $this->dispatch('toast', type: 'error', message: 'No export files found.');
+            return;
+        }
+
+        $this->dispatch('toast', type: 'success', message: "ZIP created with {$count} file(s).");
+        $this->redirect(route('file.download', ['path' => $zipPath]));
     }
 
     public function getPostersProperty()

@@ -10,7 +10,12 @@ class Setting extends Model
 
     public static function get(string $key, mixed $default = null): mixed
     {
-        $setting = static::where('key', $key)->first();
+        try {
+            $setting = static::where('key', $key)->first();
+        } catch (\Illuminate\Database\QueryException) {
+            static::ensureTableExists();
+            $setting = static::where('key', $key)->first();
+        }
 
         if (! $setting) {
             return $default;
@@ -25,9 +30,31 @@ class Setting extends Model
     {
         $storedValue = is_array($value) ? json_encode($value) : $value;
 
-        static::updateOrCreate(
-            ['key' => $key],
-            ['value' => $storedValue],
-        );
+        try {
+            static::updateOrCreate(
+                ['key' => $key],
+                ['value' => $storedValue],
+            );
+        } catch (\Illuminate\Database\QueryException) {
+            static::ensureTableExists();
+            static::updateOrCreate(
+                ['key' => $key],
+                ['value' => $storedValue],
+            );
+        }
+    }
+
+    private static function ensureTableExists(): void
+    {
+        $schema = static::resolveConnection()->getSchemaBuilder();
+
+        if (! $schema->hasTable('settings')) {
+            $schema->create('settings', function (\Illuminate\Database\Schema\Blueprint $table) {
+                $table->id();
+                $table->string('key')->unique();
+                $table->text('value')->nullable();
+                $table->timestamps();
+            });
+        }
     }
 }

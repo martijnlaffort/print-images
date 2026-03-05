@@ -23,7 +23,7 @@
                 <div class="overflow-hidden rounded-lg bg-white border border-gray-200 shadow-sm">
                     <div class="aspect-video bg-gray-100 overflow-hidden">
                         @if(file_exists($template->background_path))
-                            <img src="data:image/jpeg;base64,{{ base64_encode(file_get_contents($template->background_path)) }}" class="h-full w-full object-cover" alt="{{ $template->name }}">
+                            <img src="{{ route('template.image', $template) }}" class="h-full w-full object-cover" alt="{{ $template->name }}" loading="lazy">
                         @else
                             <div class="flex h-full items-center justify-center text-gray-400">
                                 <svg class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -34,7 +34,12 @@
                     </div>
                     <div class="p-4">
                         <h3 class="font-medium text-gray-900">{{ $template->name }}</h3>
-                        <p class="text-sm text-gray-500">{{ ucfirst($template->category) }} &middot; {{ $template->aspect_ratio }}</p>
+                        <p class="text-sm text-gray-500">
+                            {{ ucfirst(str_replace('-', ' ', $template->category)) }} &middot; {{ $template->aspect_ratio }}
+                            @if($template->slots_count > 1)
+                                &middot; {{ $template->slots_count }} slots
+                            @endif
+                        </p>
                         <div class="mt-3 flex gap-2">
                             <a href="/templates/{{ $template->id }}/edit" class="rounded bg-gray-100 px-3 py-1 text-xs font-medium text-gray-700 hover:bg-gray-200" wire:navigate>
                                 Edit

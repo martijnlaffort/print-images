@@ -47,10 +47,26 @@ class Poster extends Model
 
     public function getThumbnailUrlAttribute(): string
     {
-        $path = $this->original_path;
+        if (file_exists($this->original_path)) {
+            return route('poster.image', ['poster' => $this->id, 'type' => 'thumbnail']);
+        }
 
-        if (file_exists($path)) {
-            return 'data:image/jpeg;base64,' . base64_encode(file_get_contents($path));
+        return '';
+    }
+
+    public function getOriginalUrlAttribute(): string
+    {
+        if (file_exists($this->original_path)) {
+            return route('poster.image', ['poster' => $this->id, 'type' => 'original']);
+        }
+
+        return '';
+    }
+
+    public function getUpscaledUrlAttribute(): string
+    {
+        if ($this->upscaled_path && file_exists($this->upscaled_path)) {
+            return route('poster.image', ['poster' => $this->id, 'type' => 'upscaled']);
         }
 
         return '';

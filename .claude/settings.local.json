@@ -6,7 +6,9 @@
       "Edit",
       "Write",
       "WebSearch",
-      "WebFetch(domain:herd.laravel.com)"
+      "WebFetch(domain:herd.laravel.com)",
+      "WebFetch(domain:letsenhance.io)",
+      "WebFetch(domain:placeit.net)"
     ]
   }
 }

@@ -1,6 +1,18 @@
 <div>
     <div class="flex items-center justify-between mb-6">
         <h1 class="text-2xl font-bold text-gray-900">Export</h1>
+        @if(count($selectedPosters) > 0)
+            <button
+                wire:click="downloadZip"
+                wire:loading.attr="disabled"
+                wire:target="downloadZip"
+                class="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+            >
+                <x-spinner wire:loading wire:target="downloadZip" />
+                <span wire:loading.remove wire:target="downloadZip">Download ZIP</span>
+                <span wire:loading wire:target="downloadZip">Creating...</span>
+            </button>
+        @endif
     </div>
 
     <div class="grid grid-cols-3 gap-6">
@@ -108,6 +120,22 @@
         <div>
             <h2 class="mb-3 text-sm font-semibold text-gray-700 uppercase tracking-wide">Export Settings</h2>
             <div class="rounded-lg bg-white border border-gray-200 p-4 space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Output Format</label>
+                    <select wire:model="outputFormat" class="w-full rounded-lg border-gray-300 text-sm focus:border-green-500 focus:ring-green-500">
+                        <option value="png">PNG (lossless)</option>
+                        <option value="jpg">JPEG (smaller files)</option>
+                    </select>
+                </div>
+
+                @if($outputFormat === 'jpg')
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">JPEG Quality: {{ $outputQuality }}%</label>
+                        <input type="range" wire:model.live="outputQuality" min="60" max="100" step="1"
+                            class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-green-600">
+                    </div>
+                @endif
+
                 <div>
                     <label class="block text-sm font-medium text-gray-700 mb-1">Naming Pattern</label>
                     <input type="text" wire:model="namingPattern" class="w-full rounded-lg border-gray-300 text-sm focus:border-green-500 focus:ring-green-500">

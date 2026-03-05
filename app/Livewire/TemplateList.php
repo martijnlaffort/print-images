@@ -16,7 +16,7 @@ class TemplateList extends Component
     public function render()
     {
         return view('livewire.template-list', [
-            'templates' => MockupTemplate::orderBy('name')->get(),
+            'templates' => MockupTemplate::withCount('slots')->orderBy('name')->get(),
         ]);
     }
 }

@@ -39,7 +39,13 @@ class DpiValidator
 
     public function pixelsAt300Dpi(string $sizeName): ?array
     {
-        if (isset(self::PIXELS_AT_300DPI[$sizeName])) {
+        return $this->pixelsAtDpi($sizeName, 300);
+    }
+
+    public function pixelsAtDpi(string $sizeName, int $dpi = 300): ?array
+    {
+        // For 300 DPI, use pre-calculated values if available
+        if ($dpi === 300 && isset(self::PIXELS_AT_300DPI[$sizeName])) {
             return self::PIXELS_AT_300DPI[$sizeName];
         }
 
@@ -51,9 +57,28 @@ class DpiValidator
         $spec = $sizes[$sizeName];
 
         return [
-            'width' => (int) round($spec['width_cm'] / 2.54 * 300),
-            'height' => (int) round($spec['height_cm'] / 2.54 * 300),
+            'width' => (int) round($spec['width_cm'] / 2.54 * $dpi),
+            'height' => (int) round($spec['height_cm'] / 2.54 * $dpi),
         ];
+    }
+
+    public function calculateEffectiveDpi(string $imagePath, string $sizeName): ?float
+    {
+        $info = @getimagesize($imagePath);
+        if ($info === false) {
+            return null;
+        }
+
+        $sizes = $this->allSizes();
+        if (! isset($sizes[$sizeName])) {
+            return null;
+        }
+
+        $spec = $sizes[$sizeName];
+        $dpiW = $info[0] / ($spec['width_cm'] / 2.54);
+        $dpiH = $info[1] / ($spec['height_cm'] / 2.54);
+
+        return round(min($dpiW, $dpiH));
     }
 
     public function validate(string $imagePath, string $size, int $minDpi = 150): array
