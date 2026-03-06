@@ -69,8 +69,14 @@
                     sampleImage: null,
                     sampleLoaded: false,
                     showGrid: false,
+                    showPreview: true,
                     toolMode: 'select', // 'select' or 'draw'
                     lastSampleSrc: '',
+                    // Undo history
+                    history: [],
+                    historyIndex: -1,
+                    maxHistory: 50,
+                    skipHistoryPush: false,
                     // Zoom & pan
                     zoom: 1,
                     panX: 0,
@@ -79,9 +85,11 @@
                     panOriginal: null,
                     spaceDown: false,
                     init() {
+                        this.pushHistory();
                         this.loadSampleImage();
                         this.$watch('corners', () => this.renderPreview());
                         this.$watch('activeSlot', () => this.renderPreview());
+                        this.$watch('showPreview', () => this.renderPreview());
                         Livewire.hook('morph.updated', ({el}) => {
                             this.$nextTick(() => {
                                 const newSrc = this.$refs.sampleSrc?.value || '';
@@ -159,6 +167,35 @@
                         this.panOriginal = { x: this.panX, y: this.panY };
                         event.preventDefault();
                     },
+                    pushHistory() {
+                        if (this.skipHistoryPush) return;
+                        const state = JSON.stringify(this.corners);
+                        // Don't push if same as current
+                        if (this.historyIndex >= 0 && this.history[this.historyIndex] === state) return;
+                        // Truncate any future states
+                        this.history = this.history.slice(0, this.historyIndex + 1);
+                        this.history.push(state);
+                        if (this.history.length > this.maxHistory) this.history.shift();
+                        this.historyIndex = this.history.length - 1;
+                    },
+                    undo() {
+                        if (this.historyIndex <= 0) return;
+                        this.historyIndex--;
+                        this.skipHistoryPush = true;
+                        this.corners = JSON.parse(this.history[this.historyIndex]);
+                        this.corners.forEach((c, i) => $wire.updateCorner(i, c.x, c.y));
+                        this.$nextTick(() => { this.skipHistoryPush = false; });
+                    },
+                    redo() {
+                        if (this.historyIndex >= this.history.length - 1) return;
+                        this.historyIndex++;
+                        this.skipHistoryPush = true;
+                        this.corners = JSON.parse(this.history[this.historyIndex]);
+                        this.corners.forEach((c, i) => $wire.updateCorner(i, c.x, c.y));
+                        this.$nextTick(() => { this.skipHistoryPush = false; });
+                    },
+                    get canUndo() { return this.historyIndex > 0; },
+                    get canRedo() { return this.historyIndex < this.history.length - 1; },
                     loadSampleImage() {
                         const src = this.$refs.sampleSrc?.value;
                         this.lastSampleSrc = src || '';
@@ -329,6 +366,7 @@
                             this.corners.forEach((c, i) => {
                                 $wire.updateCorner(i, c.x, c.y);
                             });
+                            this.pushHistory();
                         }
                         this.dragging = null;
                         this.dragMode = null;
@@ -347,6 +385,7 @@
                                 y: Math.max(0, Math.min(this.imageHeight, c.y + dy)),
                             };
                             $wire.updateCorner(this.selectedCorner, this.corners[this.selectedCorner].x, this.corners[this.selectedCorner].y);
+                            this.pushHistory();
                         }
                     },
                     nudgeAll(dx, dy) {
@@ -357,8 +396,20 @@
                             };
                         }
                         this.corners.forEach((c, i) => $wire.updateCorner(i, c.x, c.y));
+                        this.pushHistory();
                     },
                     handleKeydown(event) {
+                        // Ctrl+Z = undo, Ctrl+Shift+Z / Ctrl+Y = redo
+                        if ((event.ctrlKey || event.metaKey) && event.key === 'z' && !event.shiftKey) {
+                            this.undo();
+                            event.preventDefault();
+                            return;
+                        }
+                        if ((event.ctrlKey || event.metaKey) && (event.key === 'Z' || event.key === 'y')) {
+                            this.redo();
+                            event.preventDefault();
+                            return;
+                        }
                         if (event.key === ' ') {
                             this.spaceDown = true;
                             event.preventDefault();
@@ -426,15 +477,34 @@
                             const slotCorners = si === this.activeSlot ? this.corners : this.allSlots[si].corners;
                             const isActive = si === this.activeSlot;
 
-                            if (!this.sampleLoaded || !this.sampleImage) {
-                                ctx.beginPath();
-                                ctx.moveTo(slotCorners[0].x, slotCorners[0].y);
-                                ctx.lineTo(slotCorners[1].x, slotCorners[1].y);
-                                ctx.lineTo(slotCorners[2].x, slotCorners[2].y);
-                                ctx.lineTo(slotCorners[3].x, slotCorners[3].y);
-                                ctx.closePath();
-                                ctx.fillStyle = isActive ? 'rgba(99, 102, 241, 0.15)' : 'rgba(156, 163, 175, 0.1)';
+                            // Draw outline for all modes
+                            ctx.beginPath();
+                            ctx.moveTo(slotCorners[0].x, slotCorners[0].y);
+                            ctx.lineTo(slotCorners[1].x, slotCorners[1].y);
+                            ctx.lineTo(slotCorners[2].x, slotCorners[2].y);
+                            ctx.lineTo(slotCorners[3].x, slotCorners[3].y);
+                            ctx.closePath();
+
+                            if (!this.showPreview || !this.sampleLoaded || !this.sampleImage) {
+                                // Outline-only mode: semi-transparent fill + visible stroke
+                                ctx.fillStyle = isActive ? 'rgba(99, 102, 241, 0.12)' : 'rgba(156, 163, 175, 0.08)';
                                 ctx.fill();
+                                ctx.strokeStyle = isActive ? 'rgba(99, 102, 241, 0.6)' : 'rgba(156, 163, 175, 0.4)';
+                                ctx.lineWidth = isActive ? 3 : 1.5;
+                                ctx.setLineDash(isActive ? [8, 4] : [5, 5]);
+                                ctx.stroke();
+                                ctx.setLineDash([]);
+                                // Draw diagonal cross to mark the area
+                                if (isActive) {
+                                    ctx.strokeStyle = 'rgba(99, 102, 241, 0.25)';
+                                    ctx.lineWidth = 1;
+                                    ctx.beginPath();
+                                    ctx.moveTo(slotCorners[0].x, slotCorners[0].y);
+                                    ctx.lineTo(slotCorners[2].x, slotCorners[2].y);
+                                    ctx.moveTo(slotCorners[1].x, slotCorners[1].y);
+                                    ctx.lineTo(slotCorners[3].x, slotCorners[3].y);
+                                    ctx.stroke();
+                                }
                                 continue;
                             }
 
@@ -498,6 +568,7 @@
                             y: Math.round(c.y * this.imageHeight),
                         }));
                         this.corners.forEach((c, i) => { $wire.updateCorner(i, c.x, c.y); });
+                        this.pushHistory();
                     }
                 }"
                 @mousemove.window="onMove($event)"
@@ -679,6 +750,19 @@
                         <input type="checkbox" x-model="showGrid" @change="renderPreview()" class="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 h-3.5 w-3.5">
                         Show grid
                     </label>
+                    <label class="flex items-center gap-2 text-xs text-gray-500 cursor-pointer">
+                        <input type="checkbox" x-model="showPreview" class="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 h-3.5 w-3.5">
+                        Show preview
+                    </label>
+                    {{-- Undo / Redo --}}
+                    <div class="flex items-center gap-1">
+                        <button @click="undo()" :disabled="!canUndo" class="rounded bg-gray-100 px-1.5 py-0.5 text-xs text-gray-600 hover:bg-gray-200 disabled:opacity-30 disabled:cursor-not-allowed" title="Undo (Ctrl+Z)">
+                            <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h10a5 5 0 015 5v2M3 10l4-4M3 10l4 4"/></svg>
+                        </button>
+                        <button @click="redo()" :disabled="!canRedo" class="rounded bg-gray-100 px-1.5 py-0.5 text-xs text-gray-600 hover:bg-gray-200 disabled:opacity-30 disabled:cursor-not-allowed" title="Redo (Ctrl+Shift+Z)">
+                            <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 10H11a5 5 0 00-5 5v2M21 10l-4-4M21 10l-4 4"/></svg>
+                        </button>
+                    </div>
                     {{-- Zoom controls --}}
                     <div class="flex items-center gap-1">
                         <button @click="zoom = Math.max(1, zoom / 1.25); clampPan()" class="rounded bg-gray-100 px-1.5 py-0.5 text-xs text-gray-600 hover:bg-gray-200" title="Zoom out (-)">-</button>
