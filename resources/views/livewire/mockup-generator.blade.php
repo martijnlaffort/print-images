@@ -141,10 +141,53 @@
                 @if($selectedTemplate)
                     @php $tpl = \App\Models\MockupTemplate::find($selectedTemplate); @endphp
                     @if($tpl && file_exists($tpl->background_path))
-                        <div class="text-center">
-                            <img src="{{ route('template.image', $tpl) }}" class="max-h-[500px] rounded shadow-md" alt="{{ $tpl->name }}">
+                        <div class="text-center w-full">
+                            <img src="{{ route('template.image', $tpl) }}" class="max-h-[400px] mx-auto rounded shadow-md" alt="{{ $tpl->name }}">
                             <p class="mt-3 text-sm font-medium text-gray-700">{{ $tpl->name }}</p>
                             <p class="text-xs text-gray-500">{{ ucfirst(str_replace('-', ' ', $tpl->category)) }} &middot; {{ $tpl->aspect_ratio }}</p>
+
+                            @if($this->isMultiSlot)
+                                {{-- Multi-slot assignment UI --}}
+                                <div class="mt-4 border-t border-gray-200 pt-4">
+                                    <h3 class="text-sm font-semibold text-gray-700 mb-3">Assign Posters to Slots</h3>
+                                    <div class="space-y-3">
+                                        @foreach($this->selectedTemplateSlots as $index => $slot)
+                                            <div class="flex items-center gap-3 bg-gray-50 rounded-lg p-3">
+                                                <span class="shrink-0 inline-flex items-center justify-center h-6 w-6 rounded-full bg-purple-100 text-purple-700 text-xs font-bold">{{ $index + 1 }}</span>
+                                                <span class="shrink-0 text-sm font-medium text-gray-700 w-20 text-left">{{ $slot['label'] }}</span>
+                                                <select
+                                                    wire:change="assignPosterToSlot({{ $index }}, $event.target.value)"
+                                                    class="flex-1 rounded-lg border-gray-300 text-sm focus:border-purple-500 focus:ring-purple-500"
+                                                >
+                                                    <option value="">-- Select poster --</option>
+                                                    @foreach($posters as $poster)
+                                                        <option value="{{ $poster->id }}" @selected(($slotAssignments[$index] ?? null) == $poster->id)>
+                                                            {{ $poster->title }}
+                                                        </option>
+                                                    @endforeach
+                                                </select>
+                                                @if(($slotAssignments[$index] ?? null) && ($assignedPoster = $posters->firstWhere('id', $slotAssignments[$index])))
+                                                    <div class="h-8 w-8 shrink-0 overflow-hidden rounded bg-gray-100">
+                                                        @if($assignedPoster->thumbnail_url)
+                                                            <img src="{{ $assignedPoster->thumbnail_url }}" class="h-full w-full object-cover">
+                                                        @endif
+                                                    </div>
+                                                @endif
+                                            </div>
+                                        @endforeach
+                                    </div>
+                                    <button
+                                        wire:click="generateForTemplate({{ $tpl->id }})"
+                                        wire:loading.attr="disabled"
+                                        wire:target="generateForTemplate({{ $tpl->id }})"
+                                        class="mt-4 inline-flex items-center gap-2 rounded-lg bg-purple-600 px-4 py-2 text-sm font-medium text-white hover:bg-purple-700 disabled:opacity-50"
+                                    >
+                                        <x-spinner wire:loading wire:target="generateForTemplate({{ $tpl->id }})" />
+                                        <span wire:loading.remove wire:target="generateForTemplate({{ $tpl->id }})">Generate Multi-Image Mockup</span>
+                                        <span wire:loading wire:target="generateForTemplate({{ $tpl->id }})">Generating...</span>
+                                    </button>
+                                </div>
+                            @endif
                         </div>
                     @endif
                 @else
@@ -158,13 +201,19 @@
             <h2 class="mb-3 text-sm font-semibold text-gray-700 uppercase tracking-wide">Templates</h2>
             <div class="space-y-2 max-h-[calc(100vh-200px)] overflow-y-auto">
                 @forelse($templates as $template)
+                    @php $slotCount = count($template->getAllSlots()); @endphp
                     <div
                         wire:click="selectTemplate({{ $template->id }})"
                         class="cursor-pointer rounded-lg border p-3 transition-colors hover:bg-gray-50 {{ $selectedTemplate === $template->id ? 'border-purple-500 bg-purple-50' : 'border-gray-200 bg-white' }}"
                     >
-                        <p class="text-sm font-medium text-gray-900">{{ $template->name }}</p>
+                        <div class="flex items-center justify-between">
+                            <p class="text-sm font-medium text-gray-900">{{ $template->name }}</p>
+                            @if($slotCount > 1)
+                                <span class="inline-flex items-center rounded-full bg-purple-100 px-2 py-0.5 text-xs font-medium text-purple-700">{{ $slotCount }} slots</span>
+                            @endif
+                        </div>
                         <p class="text-xs text-gray-500">{{ ucfirst(str_replace('-', ' ', $template->category)) }} &middot; {{ $template->aspect_ratio }}</p>
-                        @if(count($selectedPosters) > 0)
+                        @if(count($selectedPosters) > 0 && $slotCount <= 1)
                             <button
                                 wire:click.stop="generateForTemplate({{ $template->id }})"
                                 wire:loading.attr="disabled"
@@ -175,6 +224,8 @@
                                 <span wire:loading.remove wire:target="generateForTemplate({{ $template->id }})">Generate</span>
                                 <span wire:loading wire:target="generateForTemplate({{ $template->id }})">Generating...</span>
                             </button>
+                        @elseif($slotCount > 1 && $selectedTemplate === $template->id)
+                            <p class="mt-2 text-xs text-purple-600 font-medium">Assign posters in the preview panel</p>
                         @endif
                     </div>
                 @empty

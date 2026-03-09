@@ -32,6 +32,8 @@ class UpscaleImage implements ShouldQueue
 
     public function handle(UpscaleService $upscaleService, NamingService $namingService, DpiValidator $dpiValidator): void
     {
+        set_time_limit(0);
+
         $this->updateProgress('upscaling', 10);
 
         $outputFilename = $namingService->upscaledName($this->poster->slug);

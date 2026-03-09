@@ -127,56 +127,27 @@ class UpscaleService
         $tempFiles = [];
 
         try {
-            // Multi-pass upscaling: Real-ESRGAN supports max 4x per pass
-            $remainingScale = $requiredScale;
-            $pass = 0;
+            // Single AI upscale pass (max 4x), then Lanczos resize to target.
+            // Multi-pass is too slow: the second AI pass operates on a massive image.
+            $passScale = $requiredScale <= 2.0 ? 2 : 4;
 
-            // Count total passes needed for progress calculation
-            $tempRemaining = $requiredScale;
-            $totalPasses = 0;
-            while ($tempRemaining > 1.0) {
-                $s = min(4, (int) ceil($tempRemaining));
-                if ($s < 2) $s = 2;
-                if ($s > 2 && $s < 4) $s = 4;
-                $tempRemaining /= $s;
-                $totalPasses++;
-            }
+            $passOutput = $tempDir . '/upscale_pass_' . uniqid() . '.png';
+            $tempFiles[] = $passOutput;
 
-            while ($remainingScale > 1.0) {
-                $passScale = min(4, (int) ceil($remainingScale));
-                // For small remaining scales (1.x - 2.x), still use 4x then resize down
-                // This produces better quality than trying fractional scales
-                if ($passScale < 2) {
-                    $passScale = 2;
-                }
-                // Real-ESRGAN only supports 4x and 2x for most models
-                if ($passScale > 2 && $passScale < 4) {
-                    $passScale = 4;
-                }
+            $report(10);
 
-                $passOutput = $tempDir . '/upscale_pass_' . $pass . '_' . uniqid() . '.png';
-                $tempFiles[] = $passOutput;
+            $this->upscale(
+                $currentInput,
+                $passOutput,
+                $passScale,
+                $model,
+                $denoise,
+                $tileSize,
+            );
 
-                $isLastPass = ($remainingScale / $passScale) <= 1.0;
+            $currentInput = $passOutput;
 
-                // Progress: upscale passes span 0-70% of the work
-                $report((int) (($pass / $totalPasses) * 70));
-
-                $this->upscale(
-                    $currentInput,
-                    $passOutput,
-                    $passScale,
-                    $model,
-                    $isLastPass ? $denoise : 0, // Only blend on final pass
-                    $tileSize,
-                );
-
-                $currentInput = $passOutput;
-                $remainingScale = $remainingScale / $passScale;
-                $pass++;
-
-                $report((int) (($pass / $totalPasses) * 70));
-            }
+            $report(70);
 
             $report(70);
 

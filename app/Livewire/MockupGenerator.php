@@ -22,13 +22,57 @@ class MockupGenerator extends Component
     public int $overlayFontSize = 32;
     public string $overlayFontColor = 'white';
     public string $overlayPosition = 'South';
+    public array $slotAssignments = [];
+
+    public function selectTemplate(int $id): void
+    {
+        $this->selectedTemplate = $id;
+        $this->initSlotAssignments();
+    }
+
+    public function assignPosterToSlot(int $slotIndex, ?int $posterId): void
+    {
+        $this->slotAssignments[$slotIndex] = $posterId;
+    }
+
+    public function getSelectedTemplateSlotsProperty(): array
+    {
+        if (! $this->selectedTemplate) {
+            return [];
+        }
+
+        $template = MockupTemplate::find($this->selectedTemplate);
+
+        return $template ? $template->getAllSlots() : [];
+    }
+
+    public function getIsMultiSlotProperty(): bool
+    {
+        return count($this->selectedTemplateSlots) > 1;
+    }
+
+    private function initSlotAssignments(): void
+    {
+        $slots = $this->selectedTemplateSlots;
+        $this->slotAssignments = [];
+
+        foreach ($slots as $i => $slot) {
+            $this->slotAssignments[$i] = $this->selectedPosters[$i] ?? null;
+        }
+    }
 
     public function generateForTemplate(int $templateId): void
     {
         $template = MockupTemplate::findOrFail($templateId);
-        $posters = Poster::whereIn('id', $this->selectedPosters)->get();
-
+        $slots = $template->getAllSlots();
         $textOverlay = $this->getTextOverlay();
+
+        if (count($slots) > 1) {
+            $this->generateMultiSlot($template, $textOverlay);
+            return;
+        }
+
+        $posters = Poster::whereIn('id', $this->selectedPosters)->get();
 
         foreach ($posters as $poster) {
             GenerateMockup::dispatchSync(
@@ -43,6 +87,37 @@ class MockupGenerator extends Component
         }
 
         $this->dispatch('toast', type: 'success', message: "Generated {$posters->count()} mockup(s).");
+    }
+
+    private function generateMultiSlot(MockupTemplate $template, ?array $textOverlay): void
+    {
+        $assignments = collect($this->slotAssignments)->filter();
+
+        if ($assignments->isEmpty()) {
+            $this->dispatch('toast', type: 'error', message: 'Assign at least one poster to a slot.');
+            return;
+        }
+
+        $posters = [];
+        foreach ($this->slotAssignments as $posterId) {
+            $posters[] = $posterId ? Poster::find($posterId) : null;
+        }
+
+        // Fill gaps: use the first assigned poster for empty slots
+        $firstPoster = collect($posters)->filter()->first();
+        $posters = array_map(fn ($p) => $p ?? $firstPoster, $posters);
+
+        GenerateMockup::dispatchSync(
+            $posters,
+            $template,
+            $this->fitMode,
+            $this->outputFormat,
+            $this->outputQuality,
+            $this->framePreset,
+            $textOverlay,
+        );
+
+        $this->dispatch('toast', type: 'success', message: 'Generated multi-image mockup.');
     }
 
     public function generateAll(): void
@@ -71,11 +146,6 @@ class MockupGenerator extends Component
         }
 
         $this->dispatch('toast', type: 'success', message: "Generated {$count} mockup(s).");
-    }
-
-    public function selectTemplate(int $id): void
-    {
-        $this->selectedTemplate = $id;
     }
 
     public function downloadZip(): void
@@ -113,7 +183,7 @@ class MockupGenerator extends Component
         }
 
         $this->dispatch('toast', type: 'success', message: "ZIP created with {$count} mockup(s).");
-        $this->redirect(route('file.download', ['path' => $zipPath]));
+        $this->redirect(route('file.download', ['path' => $zipPath]), navigate: false);
     }
 
     public function getPostersProperty()

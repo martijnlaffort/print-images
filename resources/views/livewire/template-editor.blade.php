@@ -642,9 +642,9 @@
                                     :class="selectedCorner === index
                                         ? 'border-yellow-300 bg-yellow-400 ring-2 ring-yellow-300 ring-offset-1'
                                         : 'border-white bg-indigo-500'"
-                                    :style="`left: ${(corner.x / imageWidth) * 100}%; top: ${(corner.y / imageHeight) * 100}%; width: ${Math.max(16, 24 / zoom)}px; height: ${Math.max(16, 24 / zoom)}px;`"
+                                    :style="`left: ${(corner.x / imageWidth) * 100}%; top: ${(corner.y / imageHeight) * 100}%; width: ${dragging !== null ? Math.max(6, 8 / zoom) : Math.max(16, 24 / zoom)}px; height: ${dragging !== null ? Math.max(6, 8 / zoom) : Math.max(16, 24 / zoom)}px; opacity: ${dragging !== null ? 0.5 : 1};`"
                                 >
-                                    <span class="absolute -top-5 left-1/2 -translate-x-1/2 font-bold text-white rounded px-1 py-0.5 whitespace-nowrap pointer-events-none"
+                                    <span x-show="dragging === null" class="absolute -top-5 left-1/2 -translate-x-1/2 font-bold text-white rounded px-1 py-0.5 whitespace-nowrap pointer-events-none"
                                           :class="selectedCorner === index ? 'bg-yellow-500' : 'bg-indigo-600'"
                                           :style="`font-size: ${Math.max(8, 10 / zoom)}px;`"
                                           x-text="['TL','TR','BR','BL'][index]"></span>
@@ -710,9 +710,9 @@
                                     :class="selectedCorner === index
                                         ? 'border-yellow-300 bg-yellow-400 ring-2 ring-yellow-300 ring-offset-1'
                                         : 'border-white bg-indigo-500'"
-                                    :style="`left: ${(corner.x / imageWidth) * 100}%; top: ${(corner.y / imageHeight) * 100}%; width: ${Math.max(16, 24 / zoom)}px; height: ${Math.max(16, 24 / zoom)}px;`"
+                                    :style="`left: ${(corner.x / imageWidth) * 100}%; top: ${(corner.y / imageHeight) * 100}%; width: ${dragging !== null ? Math.max(6, 8 / zoom) : Math.max(16, 24 / zoom)}px; height: ${dragging !== null ? Math.max(6, 8 / zoom) : Math.max(16, 24 / zoom)}px; opacity: ${dragging !== null ? 0.5 : 1};`"
                                 >
-                                    <span class="absolute -top-5 left-1/2 -translate-x-1/2 font-bold text-white rounded px-1 py-0.5 whitespace-nowrap pointer-events-none"
+                                    <span x-show="dragging === null" class="absolute -top-5 left-1/2 -translate-x-1/2 font-bold text-white rounded px-1 py-0.5 whitespace-nowrap pointer-events-none"
                                           :class="selectedCorner === index ? 'bg-yellow-500' : 'bg-indigo-600'"
                                           :style="`font-size: ${Math.max(8, 10 / zoom)}px;`"
                                           x-text="['TL','TR','BR','BL'][index]"></span>

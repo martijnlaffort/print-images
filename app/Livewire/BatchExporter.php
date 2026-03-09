@@ -129,7 +129,7 @@ class BatchExporter extends Component
         }
 
         $this->dispatch('toast', type: 'success', message: "ZIP created with {$count} file(s).");
-        $this->redirect(route('file.download', ['path' => $zipPath]));
+        $this->redirect(route('file.download', ['path' => $zipPath]), navigate: false);
     }
 
     public function getPostersProperty()
