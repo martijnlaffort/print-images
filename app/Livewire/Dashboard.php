@@ -72,19 +72,34 @@ class Dashboard extends Component
     {
         $poster = Poster::find($id);
         if ($poster) {
+            $this->deleteFiles($poster);
             $poster->delete();
         }
-        $this->selected = array_values(array_diff($this->selected, [$id]));
+        $this->selected = array_values(array_diff($this->selected, [(string) $id]));
         $this->dispatch('toast', type: 'success', message: 'Poster deleted.');
     }
 
     public function deleteSelected(): void
     {
-        $count = count($this->selected);
-        Poster::whereIn('id', $this->selected)->delete();
+        $posters = Poster::whereIn('id', $this->selected)->get();
+        foreach ($posters as $poster) {
+            $this->deleteFiles($poster);
+            $poster->delete();
+        }
+        $count = $posters->count();
         $this->selected = [];
         $this->selectAll = false;
         $this->dispatch('toast', type: 'success', message: "{$count} poster(s) deleted.");
+    }
+
+    private function deleteFiles(Poster $poster): void
+    {
+        if ($poster->original_path && file_exists($poster->original_path)) {
+            @unlink($poster->original_path);
+        }
+        if ($poster->upscaled_path && file_exists($poster->upscaled_path)) {
+            @unlink($poster->upscaled_path);
+        }
     }
 
     public function updatedSelectAll(): void

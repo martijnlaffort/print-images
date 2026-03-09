@@ -1,6 +1,8 @@
 <?php
 
 return [
+    'imagemagick_path' => env('IMAGEMAGICK_PATH'),
+
     'naming' => [
         'upscaled' => '{title}_upscaled.png',
         'size_variant' => '{title}_{size}.png',

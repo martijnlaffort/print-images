@@ -67,7 +67,7 @@ class UpscaleService
                     $aiWeight = 100 - $denoise;
                     $blendResult = Process::timeout(60)->run([
                         $magick, 'composite',
-                        '-blend', "{$aiWeight}",
+                        '-dissolve', "{$aiWeight}",
                         $aiOutput, $bicubicOutput,
                         $outputPath,
                     ]);
@@ -103,6 +103,7 @@ class UpscaleService
         int $sharpen = 0,
         array $colorAdjust = [],
         int $tileSize = 0,
+        ?\Closure $onProgress = null,
     ): string {
         $magick = $this->getMagickPath();
         [$origWidth, $origHeight] = $this->getImageDimensions($inputPath);
@@ -112,8 +113,11 @@ class UpscaleService
         $scaleH = $targetHeight / $origHeight;
         $requiredScale = max($scaleW, $scaleH);
 
+        $report = fn (int $percent) => $onProgress ? $onProgress($percent) : null;
+
         // If image already meets target, just resize to exact dimensions
         if ($requiredScale <= 1.0) {
+            $report(80);
             $this->resizeToExact($inputPath, $outputPath, $targetWidth, $targetHeight);
             return $outputPath;
         }
@@ -126,6 +130,17 @@ class UpscaleService
             // Multi-pass upscaling: Real-ESRGAN supports max 4x per pass
             $remainingScale = $requiredScale;
             $pass = 0;
+
+            // Count total passes needed for progress calculation
+            $tempRemaining = $requiredScale;
+            $totalPasses = 0;
+            while ($tempRemaining > 1.0) {
+                $s = min(4, (int) ceil($tempRemaining));
+                if ($s < 2) $s = 2;
+                if ($s > 2 && $s < 4) $s = 4;
+                $tempRemaining /= $s;
+                $totalPasses++;
+            }
 
             while ($remainingScale > 1.0) {
                 $passScale = min(4, (int) ceil($remainingScale));
@@ -144,6 +159,9 @@ class UpscaleService
 
                 $isLastPass = ($remainingScale / $passScale) <= 1.0;
 
+                // Progress: upscale passes span 0-70% of the work
+                $report((int) (($pass / $totalPasses) * 70));
+
                 $this->upscale(
                     $currentInput,
                     $passOutput,
@@ -156,7 +174,11 @@ class UpscaleService
                 $currentInput = $passOutput;
                 $remainingScale = $remainingScale / $passScale;
                 $pass++;
+
+                $report((int) (($pass / $totalPasses) * 70));
             }
+
+            $report(70);
 
             // Final resize to exact target dimensions with Lanczos
             $preSharpPath = ($sharpen > 0)
@@ -169,10 +191,14 @@ class UpscaleService
 
             $this->resizeToExact($currentInput, $preSharpPath, $targetWidth, $targetHeight);
 
+            $report(80);
+
             // Optional sharpening
             if ($sharpen > 0) {
                 $this->applySharpen($preSharpPath, $outputPath, $sharpen);
             }
+
+            $report(90);
 
             // Optional color adjustment
             if (! empty($colorAdjust)) {
@@ -242,10 +268,26 @@ class UpscaleService
 
     private function getMagickPath(): string
     {
-        return match (PHP_OS_FAMILY) {
-            'Windows' => 'C:\\Program Files\\ImageMagick-7.1.2-Q16\\magick.exe',
-            default => 'magick',
-        };
+        $configured = config('posterforge.imagemagick_path');
+        if ($configured) {
+            return $configured;
+        }
+
+        if (PHP_OS_FAMILY === 'Windows') {
+            // Search common installation directories
+            $globPattern = 'C:\\Program Files\\ImageMagick-*\\magick.exe';
+            $matches = glob($globPattern);
+            if (!empty($matches)) {
+                return $matches[0];
+            }
+
+            throw new RuntimeException(
+                'ImageMagick not found. Install it from https://imagemagick.org/script/download.php#windows '
+                . 'or set IMAGEMAGICK_PATH in your .env file.'
+            );
+        }
+
+        return 'magick';
     }
 
     private function resizeToExact(string $input, string $output, int $width, int $height): void

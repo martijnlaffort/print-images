@@ -60,6 +60,11 @@ class UpscaleImage implements ShouldQueue
             $this->sharpen,
             $this->colorAdjust,
             $this->tileSize,
+            onProgress: function (int $percent) {
+                // Map 0-100% from smartUpscale to 30-90% overall
+                $mapped = 30 + (int) ($percent * 0.6);
+                $this->updateProgress('upscaling', $mapped);
+            },
         );
 
         $this->updateProgress('finalizing', 90);
