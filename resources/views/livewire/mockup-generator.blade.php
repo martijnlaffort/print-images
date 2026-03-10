@@ -249,28 +249,31 @@
                                 alt="{{ $mockup->poster->title ?? '' }} - {{ $mockup->template->name ?? '' }}"
                                 loading="lazy"
                             >
-                            <div class="p-2">
-                                <p class="truncate text-xs font-medium text-gray-900">{{ $mockup->poster->title ?? 'Unknown' }}</p>
-                                <p class="truncate text-xs text-gray-500">{{ $mockup->template->name ?? 'Unknown' }}</p>
-                            </div>
-                            <div class="absolute top-1 right-1 hidden gap-1 group-hover:flex">
-                                <a
-                                    href="{{ route('mockup.download', $mockup) }}"
-                                    class="rounded bg-indigo-600 p-1 text-white opacity-80 hover:opacity-100"
-                                    title="Download"
-                                >
-                                    <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3M3 17v3a2 2 0 002 2h14a2 2 0 002-2v-3"/></svg>
-                                </a>
-                                <button
-                                    wire:click="deleteMockup({{ $mockup->id }})"
-                                    wire:confirm="Delete this mockup?"
-                                    wire:loading.attr="disabled"
-                                    wire:target="deleteMockup({{ $mockup->id }})"
-                                    class="rounded bg-red-600 p-1 text-white opacity-80 hover:opacity-100 disabled:opacity-50"
-                                >
-                                    <x-spinner wire:loading wire:target="deleteMockup({{ $mockup->id }})" class="h-3.5 w-3.5" />
-                                    <svg wire:loading.remove wire:target="deleteMockup({{ $mockup->id }})" class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
-                                </button>
+                            <div class="flex items-center justify-between p-2">
+                                <div class="min-w-0 flex-1">
+                                    <p class="truncate text-xs font-medium text-gray-900">{{ $mockup->poster->title ?? 'Unknown' }}</p>
+                                    <p class="truncate text-xs text-gray-500">{{ $mockup->template->name ?? 'Unknown' }}</p>
+                                </div>
+                                <div class="flex gap-1 shrink-0 ml-2">
+                                    <a
+                                        href="{{ route('mockup.download', $mockup) }}"
+                                        download
+                                        class="rounded bg-indigo-100 p-1.5 text-indigo-700 hover:bg-indigo-200"
+                                        title="Download"
+                                    >
+                                        <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3M3 17v3a2 2 0 002 2h14a2 2 0 002-2v-3"/></svg>
+                                    </a>
+                                    <button
+                                        wire:click="deleteMockup({{ $mockup->id }})"
+                                        wire:confirm="Delete this mockup?"
+                                        wire:loading.attr="disabled"
+                                        wire:target="deleteMockup({{ $mockup->id }})"
+                                        class="rounded bg-red-100 p-1.5 text-red-700 hover:bg-red-200 disabled:opacity-50"
+                                    >
+                                        <x-spinner wire:loading wire:target="deleteMockup({{ $mockup->id }})" class="h-3.5 w-3.5" />
+                                        <svg wire:loading.remove wire:target="deleteMockup({{ $mockup->id }})" class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                                    </button>
+                                </div>
                             </div>
                         </div>
                     @endif
