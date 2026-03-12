@@ -7,6 +7,8 @@ use App\Models\GeneratedMockup;
 use App\Models\MockupTemplate;
 use App\Models\Poster;
 use App\Services\MockupService;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use Livewire\Component;
 
 class MockupGenerator extends Component
@@ -24,9 +26,18 @@ class MockupGenerator extends Component
     public string $overlayPosition = 'South';
     public array $slotAssignments = [];
 
+    // Preview
+    public ?string $previewImage = null;
+
+    // Async batch progress
+    public bool $processing = false;
+    public int $mockupTotal = 0;
+    public ?string $processingStartedAt = null;
+
     public function selectTemplate(int $id): void
     {
         $this->selectedTemplate = $id;
+        $this->previewImage = null;
         $this->initSlotAssignments();
     }
 
@@ -61,6 +72,64 @@ class MockupGenerator extends Component
         }
     }
 
+    // --- Preview ---
+
+    public function previewMockup(): void
+    {
+        if (! $this->selectedTemplate || empty($this->selectedPosters)) {
+            $this->dispatch('toast', type: 'error', message: 'Select a template and at least one poster.');
+            return;
+        }
+
+        $template = MockupTemplate::findOrFail($this->selectedTemplate);
+        $slots = $template->getAllSlots();
+        $mockupService = app(MockupService::class);
+
+        // Determine poster for first slot
+        if (count($slots) > 1) {
+            $posterId = collect($this->slotAssignments)->filter()->first();
+            if (! $posterId) {
+                $this->dispatch('toast', type: 'error', message: 'Assign at least one poster for preview.');
+                return;
+            }
+            $poster = Poster::find($posterId);
+        } else {
+            $poster = Poster::find($this->selectedPosters[0]);
+        }
+
+        if (! $poster) {
+            return;
+        }
+
+        $posterPath = $poster->upscaled_path ?? $poster->original_path;
+        $previewPath = sys_get_temp_dir() . '/mockup_preview_' . uniqid() . '.jpg';
+
+        try {
+            $mockupService->generatePreview(
+                $posterPath,
+                $template->background_path,
+                $slots[0]['corners'],
+                $previewPath,
+                [
+                    'shadowPath' => $template->shadow_path,
+                    'brightness' => $template->brightness_adjust,
+                    'fitMode' => $this->fitMode,
+                    'format' => 'jpg',
+                    'quality' => 75,
+                    'framePreset' => $this->framePreset,
+                ],
+            );
+
+            $this->previewImage = 'data:image/jpeg;base64,' . base64_encode(file_get_contents($previewPath));
+        } catch (\Throwable $e) {
+            $this->dispatch('toast', type: 'error', message: 'Preview failed: ' . $e->getMessage());
+        } finally {
+            @unlink($previewPath);
+        }
+    }
+
+    // --- Generate (async) ---
+
     public function generateForTemplate(int $templateId): void
     {
         $template = MockupTemplate::findOrFail($templateId);
@@ -74,8 +143,12 @@ class MockupGenerator extends Component
 
         $posters = Poster::whereIn('id', $this->selectedPosters)->get();
 
+        $this->mockupTotal = $posters->count();
+        $this->processing = true;
+        $this->processingStartedAt = now()->toDateTimeString();
+
         foreach ($posters as $poster) {
-            GenerateMockup::dispatchSync(
+            GenerateMockup::dispatch(
                 $poster,
                 $template,
                 $this->fitMode,
@@ -86,7 +159,7 @@ class MockupGenerator extends Component
             );
         }
 
-        $this->dispatch('toast', type: 'success', message: "Generated {$posters->count()} mockup(s).");
+        $this->dispatch('toast', type: 'info', message: "Queued {$posters->count()} mockup(s).");
     }
 
     private function generateMultiSlot(MockupTemplate $template, ?array $textOverlay): void
@@ -107,7 +180,11 @@ class MockupGenerator extends Component
         $firstPoster = collect($posters)->filter()->first();
         $posters = array_map(fn ($p) => $p ?? $firstPoster, $posters);
 
-        GenerateMockup::dispatchSync(
+        $this->mockupTotal = 1;
+        $this->processing = true;
+        $this->processingStartedAt = now()->toDateTimeString();
+
+        GenerateMockup::dispatch(
             $posters,
             $template,
             $this->fitMode,
@@ -117,7 +194,7 @@ class MockupGenerator extends Component
             $textOverlay,
         );
 
-        $this->dispatch('toast', type: 'success', message: 'Generated multi-image mockup.');
+        $this->dispatch('toast', type: 'info', message: 'Queued multi-image mockup.');
     }
 
     public function generateAll(): void
@@ -132,7 +209,7 @@ class MockupGenerator extends Component
         $count = 0;
         foreach ($posters as $poster) {
             foreach ($templates as $template) {
-                GenerateMockup::dispatchSync(
+                GenerateMockup::dispatch(
                     $poster,
                     $template,
                     $this->fitMode,
@@ -145,8 +222,52 @@ class MockupGenerator extends Component
             }
         }
 
-        $this->dispatch('toast', type: 'success', message: "Generated {$count} mockup(s).");
+        $this->mockupTotal = $count;
+        $this->processing = true;
+        $this->processingStartedAt = now()->toDateTimeString();
+
+        $this->dispatch('toast', type: 'info', message: "Queued {$count} mockup(s).");
     }
+
+    public function checkMockupStatus(): void
+    {
+        $pending = DB::table('jobs')
+            ->where('payload', 'like', '%GenerateMockup%')
+            ->count();
+
+        $failed = DB::table('failed_jobs')
+            ->where('payload', 'like', '%GenerateMockup%')
+            ->when($this->processingStartedAt, fn ($q) => $q->where('failed_at', '>=', $this->processingStartedAt))
+            ->count();
+
+        if ($pending === 0) {
+            $this->processing = false;
+            $this->processingStartedAt = null;
+
+            if ($failed > 0) {
+                $this->dispatch('toast', type: 'error', message: "{$failed} mockup job(s) failed.");
+            } else {
+                $this->dispatch('toast', type: 'success', message: "All {$this->mockupTotal} mockup(s) generated.");
+            }
+
+            $this->mockupTotal = 0;
+        }
+    }
+
+    public function getMockupCompletedProperty(): int
+    {
+        if (! $this->processing || $this->mockupTotal === 0) {
+            return 0;
+        }
+
+        $pending = DB::table('jobs')
+            ->where('payload', 'like', '%GenerateMockup%')
+            ->count();
+
+        return max(0, $this->mockupTotal - $pending);
+    }
+
+    // --- Download / Delete ---
 
     public function downloadZip(): void
     {
@@ -185,6 +306,8 @@ class MockupGenerator extends Component
         $this->dispatch('toast', type: 'success', message: "ZIP created with {$count} mockup(s).");
         $this->redirect(route('file.download', ['path' => $zipPath]), navigate: false);
     }
+
+    // --- Computed Properties ---
 
     public function getPostersProperty()
     {

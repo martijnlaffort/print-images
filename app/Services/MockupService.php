@@ -18,10 +18,24 @@ class MockupService
 
     private function getMagickPath(): string
     {
-        return match (PHP_OS_FAMILY) {
-            'Windows' => 'C:\\Program Files\\ImageMagick-7.1.2-Q16\\magick.exe',
-            default => 'magick',
-        };
+        $configured = config('posterforge.imagemagick_path');
+        if ($configured) {
+            return $configured;
+        }
+
+        if (PHP_OS_FAMILY === 'Windows') {
+            $matches = glob('C:\\Program Files\\ImageMagick-*\\magick.exe');
+            if (!empty($matches)) {
+                return $matches[0];
+            }
+
+            throw new RuntimeException(
+                'ImageMagick not found. Install it from https://imagemagick.org/script/download.php#windows '
+                . 'or set IMAGEMAGICK_PATH in your .env file.'
+            );
+        }
+
+        return 'magick';
     }
 
     public function generate(
@@ -136,6 +150,57 @@ class MockupService
             }
             if (isset($textImgPath)) {
                 @unlink($textImgPath);
+            }
+        }
+    }
+
+    public function generatePreview(
+        string $posterPath,
+        string $backgroundPath,
+        array $corners,
+        string $outputPath,
+        array $options = []
+    ): string {
+        $bgSize = $this->getImageSize($backgroundPath);
+        $maxDim = 800;
+        $scale = min($maxDim / $bgSize[0], $maxDim / $bgSize[1], 1.0);
+
+        if ($scale >= 0.95) {
+            return $this->generate($posterPath, $backgroundPath, $corners, $outputPath, $options);
+        }
+
+        $magick = $this->getMagickPath();
+        $tempDir = sys_get_temp_dir();
+        $tempFiles = [];
+
+        try {
+            $newW = (int) round($bgSize[0] * $scale);
+            $newH = (int) round($bgSize[1] * $scale);
+
+            $scaledBg = $tempDir . '/preview_bg_' . uniqid() . '.jpg';
+            $tempFiles[] = $scaledBg;
+            $this->runMagick([$magick, $backgroundPath, '-resize', "{$newW}x{$newH}", '-quality', '80', $scaledBg]);
+
+            $scaledCorners = array_map(fn ($c) => [
+                'x' => (int) round($c['x'] * $scale),
+                'y' => (int) round($c['y'] * $scale),
+            ], $corners);
+
+            $scaledOptions = $options;
+
+            if (! empty($options['shadowPath']) && file_exists($options['shadowPath'])) {
+                $scaledShadow = $tempDir . '/preview_shadow_' . uniqid() . '.png';
+                $tempFiles[] = $scaledShadow;
+                $this->runMagick([$magick, $options['shadowPath'], '-resize', "{$newW}x{$newH}", $scaledShadow]);
+                $scaledOptions['shadowPath'] = $scaledShadow;
+            }
+
+            $scaledOptions['quality'] = 75;
+
+            return $this->generate($posterPath, $scaledBg, $scaledCorners, $outputPath, $scaledOptions);
+        } finally {
+            foreach ($tempFiles as $f) {
+                @unlink($f);
             }
         }
     }

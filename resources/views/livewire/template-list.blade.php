@@ -23,7 +23,7 @@
                 <div class="overflow-hidden rounded-lg bg-white border border-gray-200 shadow-sm">
                     <div class="aspect-video bg-gray-100 overflow-hidden">
                         @if(file_exists($template->background_path))
-                            <img src="{{ route('template.image', $template) }}" class="h-full w-full object-cover" alt="{{ $template->name }}" loading="lazy">
+                            <img src="{{ route('template.image', ['template' => $template, 'thumb' => 1]) }}" class="h-full w-full object-cover" alt="{{ $template->name }}" loading="lazy">
                         @else
                             <div class="flex h-full items-center justify-center text-gray-400">
                                 <svg class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">

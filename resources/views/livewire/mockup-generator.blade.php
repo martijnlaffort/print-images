@@ -1,4 +1,9 @@
 <div>
+    {{-- Poll for job status when processing --}}
+    @if($processing)
+        <div wire:poll.2s="checkMockupStatus"></div>
+    @endif
+
     <div class="flex items-center justify-between mb-6">
         <h1 class="text-2xl font-bold text-gray-900">Mockup Generator</h1>
         <div class="flex gap-2">
@@ -19,15 +24,35 @@
                     wire:click="generateAll"
                     wire:loading.attr="disabled"
                     wire:target="generateAll"
+                    {{ $processing ? 'disabled' : '' }}
                     class="inline-flex items-center gap-2 rounded-lg bg-purple-600 px-4 py-2 text-sm font-medium text-white hover:bg-purple-700 disabled:opacity-50"
                 >
                     <x-spinner wire:loading wire:target="generateAll" />
                     <span wire:loading.remove wire:target="generateAll">Generate All ({{ count($selectedPosters) }} x {{ $templates->count() }})</span>
-                    <span wire:loading wire:target="generateAll">Generating...</span>
+                    <span wire:loading wire:target="generateAll">Queuing...</span>
                 </button>
             @endif
         </div>
     </div>
+
+    {{-- Progress bar --}}
+    @if($processing)
+        <div class="mb-6 rounded-lg bg-white border border-gray-200 p-4">
+            <div class="flex items-center justify-between mb-2">
+                <div class="flex items-center gap-2">
+                    <x-spinner class="h-4 w-4" />
+                    <span class="text-sm font-medium text-gray-700">Generating mockups...</span>
+                </div>
+                <span class="text-sm text-gray-500">{{ $this->mockupCompleted }} / {{ $mockupTotal }}</span>
+            </div>
+            <div class="w-full bg-gray-200 rounded-full h-2">
+                <div
+                    class="bg-purple-600 h-2 rounded-full transition-all duration-500"
+                    style="width: {{ $mockupTotal > 0 ? round(($this->mockupCompleted / $mockupTotal) * 100) : 0 }}%"
+                ></div>
+            </div>
+        </div>
+    @endif
 
     {{-- Generation Options --}}
     <div class="mb-6 rounded-lg bg-white border border-gray-200 p-4">
@@ -137,14 +162,35 @@
         {{-- Center: Preview --}}
         <div class="col-span-6">
             <h2 class="mb-3 text-sm font-semibold text-gray-700 uppercase tracking-wide">Preview</h2>
-            <div class="flex items-center justify-center rounded-lg bg-white border border-gray-200 p-6 min-h-[400px]">
+            <div class="flex flex-col items-center justify-center rounded-lg bg-white border border-gray-200 p-6 min-h-[400px]">
                 @if($selectedTemplate)
                     @php $tpl = \App\Models\MockupTemplate::find($selectedTemplate); @endphp
                     @if($tpl && file_exists($tpl->background_path))
                         <div class="text-center w-full">
-                            <img src="{{ route('template.image', $tpl) }}" class="max-h-[400px] mx-auto rounded shadow-md" alt="{{ $tpl->name }}">
+                            @if($previewImage)
+                                <img src="{{ $previewImage }}" class="max-h-[400px] mx-auto rounded shadow-md" alt="Preview">
+                                <p class="mt-2 text-xs text-purple-600 font-medium">Quick preview (first slot)</p>
+                            @else
+                                <img src="{{ route('template.image', ['template' => $tpl, 'thumb' => 1]) }}" class="max-h-[400px] mx-auto rounded shadow-md" alt="{{ $tpl->name }}">
+                            @endif
                             <p class="mt-3 text-sm font-medium text-gray-700">{{ $tpl->name }}</p>
                             <p class="text-xs text-gray-500">{{ ucfirst(str_replace('-', ' ', $tpl->category)) }} &middot; {{ $tpl->aspect_ratio }}</p>
+
+                            {{-- Preview button --}}
+                            @if(count($selectedPosters) > 0)
+                                <button
+                                    wire:click="previewMockup"
+                                    wire:loading.attr="disabled"
+                                    wire:target="previewMockup"
+                                    class="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-purple-300 bg-purple-50 px-3 py-1.5 text-xs font-medium text-purple-700 hover:bg-purple-100 disabled:opacity-50"
+                                >
+                                    <x-spinner wire:loading wire:target="previewMockup" class="h-3 w-3" />
+                                    <span wire:loading.remove wire:target="previewMockup">
+                                        {{ $previewImage ? 'Refresh Preview' : 'Preview Mockup' }}
+                                    </span>
+                                    <span wire:loading wire:target="previewMockup">Generating...</span>
+                                </button>
+                            @endif
 
                             @if($this->isMultiSlot)
                                 {{-- Multi-slot assignment UI --}}
@@ -180,11 +226,12 @@
                                         wire:click="generateForTemplate({{ $tpl->id }})"
                                         wire:loading.attr="disabled"
                                         wire:target="generateForTemplate({{ $tpl->id }})"
+                                        {{ $processing ? 'disabled' : '' }}
                                         class="mt-4 inline-flex items-center gap-2 rounded-lg bg-purple-600 px-4 py-2 text-sm font-medium text-white hover:bg-purple-700 disabled:opacity-50"
                                     >
                                         <x-spinner wire:loading wire:target="generateForTemplate({{ $tpl->id }})" />
                                         <span wire:loading.remove wire:target="generateForTemplate({{ $tpl->id }})">Generate Multi-Image Mockup</span>
-                                        <span wire:loading wire:target="generateForTemplate({{ $tpl->id }})">Generating...</span>
+                                        <span wire:loading wire:target="generateForTemplate({{ $tpl->id }})">Queuing...</span>
                                     </button>
                                 </div>
                             @endif
@@ -206,23 +253,33 @@
                         wire:click="selectTemplate({{ $template->id }})"
                         class="cursor-pointer rounded-lg border p-3 transition-colors hover:bg-gray-50 {{ $selectedTemplate === $template->id ? 'border-purple-500 bg-purple-50' : 'border-gray-200 bg-white' }}"
                     >
-                        <div class="flex items-center justify-between">
-                            <p class="text-sm font-medium text-gray-900">{{ $template->name }}</p>
-                            @if($slotCount > 1)
-                                <span class="inline-flex items-center rounded-full bg-purple-100 px-2 py-0.5 text-xs font-medium text-purple-700">{{ $slotCount }} slots</span>
-                            @endif
+                        <div class="flex items-center gap-3">
+                            <div class="h-12 w-16 shrink-0 overflow-hidden rounded bg-gray-100">
+                                @if(file_exists($template->background_path))
+                                    <img src="{{ route('template.image', ['template' => $template, 'thumb' => 1]) }}" class="h-full w-full object-cover" loading="lazy">
+                                @endif
+                            </div>
+                            <div class="min-w-0 flex-1">
+                                <div class="flex items-center justify-between">
+                                    <p class="text-sm font-medium text-gray-900 truncate">{{ $template->name }}</p>
+                                    @if($slotCount > 1)
+                                        <span class="shrink-0 inline-flex items-center rounded-full bg-purple-100 px-2 py-0.5 text-xs font-medium text-purple-700">{{ $slotCount }} slots</span>
+                                    @endif
+                                </div>
+                                <p class="text-xs text-gray-500">{{ ucfirst(str_replace('-', ' ', $template->category)) }}</p>
+                            </div>
                         </div>
-                        <p class="text-xs text-gray-500">{{ ucfirst(str_replace('-', ' ', $template->category)) }} &middot; {{ $template->aspect_ratio }}</p>
                         @if(count($selectedPosters) > 0 && $slotCount <= 1)
                             <button
                                 wire:click.stop="generateForTemplate({{ $template->id }})"
                                 wire:loading.attr="disabled"
                                 wire:target="generateForTemplate({{ $template->id }})"
+                                {{ $processing ? 'disabled' : '' }}
                                 class="mt-2 w-full inline-flex items-center justify-center gap-1.5 rounded bg-purple-100 px-3 py-1 text-xs font-medium text-purple-700 hover:bg-purple-200 disabled:opacity-50"
                             >
                                 <x-spinner wire:loading wire:target="generateForTemplate({{ $template->id }})" class="h-3 w-3" />
                                 <span wire:loading.remove wire:target="generateForTemplate({{ $template->id }})">Generate</span>
-                                <span wire:loading wire:target="generateForTemplate({{ $template->id }})">Generating...</span>
+                                <span wire:loading wire:target="generateForTemplate({{ $template->id }})">Queuing...</span>
                             </button>
                         @elseif($slotCount > 1 && $selectedTemplate === $template->id)
                             <p class="mt-2 text-xs text-purple-600 font-medium">Assign posters in the preview panel</p>

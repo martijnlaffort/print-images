@@ -50,43 +50,49 @@ class GenerateMockup implements ShouldQueue
 
         $slots = $this->template->getAllSlots();
 
-        // For multi-slot: generate one mockup with multiple posters
-        // Start with the first slot using the standard generate method
-        $posterPath = $primaryPoster->upscaled_path ?? $primaryPoster->original_path;
+        try {
+            // For multi-slot: generate one mockup with multiple posters
+            // Start with the first slot using the standard generate method
+            $posterPath = $primaryPoster->upscaled_path ?? $primaryPoster->original_path;
 
-        $mockupService->generate(
-            posterPath: $posterPath,
-            backgroundPath: $this->template->background_path,
-            corners: $slots[0]['corners'],
-            outputPath: $outputPath,
-            options: [
-                'shadowPath' => $this->template->shadow_path,
-                'framePath' => $this->template->frame_path,
-                'brightness' => $this->template->brightness_adjust,
-                'fitMode' => $this->fitMode,
-                'format' => $this->outputFormat,
-                'quality' => $this->outputQuality,
-                'framePreset' => $this->framePreset,
-                'text' => $this->textOverlay,
-            ],
-        );
-
-        // For additional slots, composite additional posters onto the result
-        for ($i = 1; $i < count($slots) && $i < count($posters); $i++) {
-            $additionalPosterPath = $posters[$i]->upscaled_path ?? $posters[$i]->original_path;
             $mockupService->generate(
-                posterPath: $additionalPosterPath,
-                backgroundPath: $outputPath,
-                corners: $slots[$i]['corners'],
+                posterPath: $posterPath,
+                backgroundPath: $this->template->background_path,
+                corners: $slots[0]['corners'],
                 outputPath: $outputPath,
                 options: [
+                    'shadowPath' => $this->template->shadow_path,
+                    'framePath' => $this->template->frame_path,
                     'brightness' => $this->template->brightness_adjust,
                     'fitMode' => $this->fitMode,
                     'format' => $this->outputFormat,
                     'quality' => $this->outputQuality,
                     'framePreset' => $this->framePreset,
+                    'text' => $this->textOverlay,
                 ],
             );
+
+            // For additional slots, composite additional posters onto the result
+            for ($i = 1; $i < count($slots) && $i < count($posters); $i++) {
+                $additionalPosterPath = $posters[$i]->upscaled_path ?? $posters[$i]->original_path;
+                $mockupService->generate(
+                    posterPath: $additionalPosterPath,
+                    backgroundPath: $outputPath,
+                    corners: $slots[$i]['corners'],
+                    outputPath: $outputPath,
+                    options: [
+                        'brightness' => $this->template->brightness_adjust,
+                        'fitMode' => $this->fitMode,
+                        'format' => $this->outputFormat,
+                        'quality' => $this->outputQuality,
+                        'framePreset' => $this->framePreset,
+                    ],
+                );
+            }
+        } catch (\Throwable $e) {
+            // Clean up partial output on failure
+            @unlink($outputPath);
+            throw $e;
         }
 
         GeneratedMockup::create([

@@ -168,7 +168,6 @@ class TemplateEditor extends Component
             'name' => $this->name,
             'slug' => Str::slug($this->name),
             'category' => $this->category,
-            'corners' => $this->posterSlots[0]['corners'], // Primary slot corners for backward compat
             'brightness_adjust' => $this->brightnessAdjust,
             'aspect_ratio' => $this->posterSlots[0]['aspect_ratio'] ?? $this->aspectRatio,
         ];

@@ -108,13 +108,55 @@ Route::get('/download-file', function (Request $request) {
     return response()->download($path)->deleteFileAfterSend();
 })->name('file.download');
 
-Route::get('/template-image/{template}', function (\App\Models\MockupTemplate $template) {
+Route::get('/template-image/{template}', function (\App\Models\MockupTemplate $template, Request $request) {
     if (! file_exists($template->background_path)) {
         abort(404);
     }
 
-    return response()->file($template->background_path, [
-        'Content-Type' => mime_content_type($template->background_path),
+    $path = $template->background_path;
+
+    if ($request->query('thumb')) {
+        $thumbDir = storage_path('app/thumbnails');
+        $thumbPath = $thumbDir . '/template_' . $template->id . '_thumb.jpg';
+
+        if (! file_exists($thumbPath) || filemtime($thumbPath) < filemtime($path)) {
+            if (! is_dir($thumbDir)) {
+                mkdir($thumbDir, 0755, true);
+            }
+
+            $imageInfo = @getimagesize($path);
+            if ($imageInfo) {
+                $srcW = $imageInfo[0];
+                $srcH = $imageInfo[1];
+                $maxDim = 400;
+                $scale = min($maxDim / $srcW, $maxDim / $srcH, 1.0);
+                $newW = (int) round($srcW * $scale);
+                $newH = (int) round($srcH * $scale);
+
+                $src = match ($imageInfo['mime']) {
+                    'image/jpeg' => imagecreatefromjpeg($path),
+                    'image/png' => imagecreatefrompng($path),
+                    'image/webp' => imagecreatefromwebp($path),
+                    default => null,
+                };
+
+                if ($src) {
+                    $thumb = imagecreatetruecolor($newW, $newH);
+                    imagecopyresampled($thumb, $src, 0, 0, 0, 0, $newW, $newH, $srcW, $srcH);
+                    imagejpeg($thumb, $thumbPath, 85);
+                    imagedestroy($src);
+                    imagedestroy($thumb);
+                }
+            }
+        }
+
+        if (file_exists($thumbPath)) {
+            $path = $thumbPath;
+        }
+    }
+
+    return response()->file($path, [
+        'Content-Type' => mime_content_type($path),
         'Cache-Control' => 'public, max-age=3600',
     ]);
 })->name('template.image');
