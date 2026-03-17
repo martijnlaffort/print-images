@@ -6,6 +6,7 @@ use App\Models\BackgroundTask;
 use App\Models\GeneratedMockup;
 use App\Models\MockupTemplate;
 use App\Models\Poster;
+use App\Models\PosterActivity;
 use App\Services\DpiValidator;
 use App\Services\MockupService;
 use App\Services\NamingService;
@@ -98,6 +99,15 @@ class ProcessPipeline implements ShouldQueue
                 $currentStep++;
                 $this->reportProgress($task, $currentStep, $totalSteps, "Exported: {$poster->title}");
             }
+        }
+
+        $stages = [];
+        if ($this->config['upscale']['enabled']) $stages[] = 'upscale';
+        if ($this->config['mockups']['enabled']) $stages[] = 'mockups';
+        if ($this->config['export']['enabled']) $stages[] = 'export';
+
+        foreach ($posters as $poster) {
+            PosterActivity::log($poster->id, 'pipeline_completed', ['stages' => $stages]);
         }
 
         $task->markCompleted();

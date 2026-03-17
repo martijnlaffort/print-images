@@ -4,10 +4,13 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Str;
 
 class Poster extends Model
 {
+    use SoftDeletes;
+
     protected $fillable = [
         'title',
         'slug',
@@ -16,6 +19,7 @@ class Poster extends Model
         'style_category',
         'status',
         'metadata',
+        'file_hash',
     ];
 
     protected $casts = [
@@ -27,8 +31,19 @@ class Poster extends Model
         return $this->hasMany(GeneratedMockup::class);
     }
 
-    public static function createFromImport(string $path): static
+    public function activities(): HasMany
     {
+        return $this->hasMany(PosterActivity::class);
+    }
+
+    public static function createFromImport(string $path): ?static
+    {
+        $hash = md5_file($path);
+
+        if ($hash && static::where('file_hash', $hash)->exists()) {
+            return null;
+        }
+
         $filename = pathinfo($path, PATHINFO_FILENAME);
         $title = Str::title(str_replace(['-', '_'], ' ', $filename));
 
@@ -37,6 +52,7 @@ class Poster extends Model
             'slug' => Str::slug($filename),
             'original_path' => $path,
             'status' => 'imported',
+            'file_hash' => $hash ?: null,
         ]);
     }
 

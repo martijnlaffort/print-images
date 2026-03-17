@@ -3,6 +3,7 @@
 namespace App\Jobs;
 
 use App\Models\Poster;
+use App\Models\PosterActivity;
 use App\Services\DpiValidator;
 use App\Services\NamingService;
 use Illuminate\Bus\Queueable;
@@ -73,6 +74,10 @@ class GenerateSizeVariants implements ShouldQueue
                 );
             }
         }
+
+        PosterActivity::log($this->poster->id, 'exported', [
+            'sizes' => $this->sizes,
+        ]);
 
         if ($this->backgroundTaskId) {
             \App\Models\BackgroundTask::find($this->backgroundTaskId)

@@ -5,6 +5,7 @@ namespace App\Jobs;
 use App\Models\GeneratedMockup;
 use App\Models\MockupTemplate;
 use App\Models\Poster;
+use App\Models\PosterActivity;
 use App\Services\MockupService;
 use App\Services\NamingService;
 use Illuminate\Bus\Queueable;
@@ -102,6 +103,10 @@ class GenerateMockup implements ShouldQueue
             'poster_id' => $primaryPoster->id,
             'template_id' => $this->template->id,
             'output_path' => $outputPath,
+        ]);
+
+        PosterActivity::log($primaryPoster->id, 'mockup_generated', [
+            'template' => $this->template->name,
         ]);
 
         foreach ($posters as $poster) {

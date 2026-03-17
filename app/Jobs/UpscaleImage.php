@@ -3,6 +3,7 @@
 namespace App\Jobs;
 
 use App\Models\Poster;
+use App\Models\PosterActivity;
 use App\Services\DpiValidator;
 use App\Services\NamingService;
 use App\Services\UpscaleService;
@@ -87,6 +88,13 @@ class UpscaleImage implements ShouldQueue
         $this->poster->update([
             'upscaled_path' => $outputPath,
             'status' => 'upscaled',
+        ]);
+
+        PosterActivity::log($this->poster->id, 'upscaled', [
+            'size' => $this->targetSize,
+            'dpi' => $this->targetDpi,
+            'model' => $this->model,
+            'denoise' => $this->denoise,
         ]);
 
         $this->updateProgress('completed', 100);
