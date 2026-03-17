@@ -142,6 +142,18 @@ return [
      * The queue workers that get auto-started on your application start.
      */
     'queue_workers' => [
+        'upscale' => [
+            'queues' => ['upscale'],
+            'memory_limit' => 512,
+            'timeout' => 0,
+            'sleep' => 3,
+        ],
+        'mockups' => [
+            'queues' => ['mockups', 'export'],
+            'memory_limit' => 256,
+            'timeout' => 600,
+            'sleep' => 3,
+        ],
         'default' => [
             'queues' => ['default'],
             'memory_limit' => 256,

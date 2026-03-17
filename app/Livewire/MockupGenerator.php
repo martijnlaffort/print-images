@@ -3,11 +3,11 @@
 namespace App\Livewire;
 
 use App\Jobs\GenerateMockup;
+use App\Models\BackgroundTask;
 use App\Models\GeneratedMockup;
 use App\Models\MockupTemplate;
 use App\Models\Poster;
 use App\Services\MockupService;
-use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Livewire\Component;
 
@@ -147,6 +147,13 @@ class MockupGenerator extends Component
         $this->processing = true;
         $this->processingStartedAt = now()->toDateTimeString();
 
+        $task = BackgroundTask::create([
+            'type' => 'mockup',
+            'name' => "Mockups: {$posters->count()} images",
+            'status' => 'pending',
+            'total_items' => $posters->count(),
+        ]);
+
         foreach ($posters as $poster) {
             GenerateMockup::dispatch(
                 $poster,
@@ -156,6 +163,7 @@ class MockupGenerator extends Component
                 $this->outputQuality,
                 $this->framePreset,
                 $textOverlay,
+                $task->id,
             );
         }
 
@@ -184,6 +192,13 @@ class MockupGenerator extends Component
         $this->processing = true;
         $this->processingStartedAt = now()->toDateTimeString();
 
+        $task = BackgroundTask::create([
+            'type' => 'mockup',
+            'name' => 'Mockup: multi-slot',
+            'status' => 'pending',
+            'total_items' => 1,
+        ]);
+
         GenerateMockup::dispatch(
             $posters,
             $template,
@@ -192,6 +207,7 @@ class MockupGenerator extends Component
             $this->outputQuality,
             $this->framePreset,
             $textOverlay,
+            $task->id,
         );
 
         $this->dispatch('toast', type: 'info', message: 'Queued multi-image mockup.');
@@ -207,6 +223,13 @@ class MockupGenerator extends Component
         $textOverlay = $this->getTextOverlay();
 
         $count = 0;
+        $task = BackgroundTask::create([
+            'type' => 'mockup',
+            'name' => 'Mockups: all templates',
+            'status' => 'pending',
+            'total_items' => $posters->count() * $templates->count(),
+        ]);
+
         foreach ($posters as $poster) {
             foreach ($templates as $template) {
                 GenerateMockup::dispatch(
@@ -217,6 +240,7 @@ class MockupGenerator extends Component
                     $this->outputQuality,
                     $this->framePreset,
                     $textOverlay,
+                    $task->id,
                 );
                 $count++;
             }
@@ -231,21 +255,21 @@ class MockupGenerator extends Component
 
     public function checkMockupStatus(): void
     {
-        $pending = DB::table('jobs')
-            ->where('payload', 'like', '%GenerateMockup%')
+        $activeTasks = BackgroundTask::where('type', 'mockup')
+            ->active()
             ->count();
 
-        $failed = DB::table('failed_jobs')
-            ->where('payload', 'like', '%GenerateMockup%')
-            ->when($this->processingStartedAt, fn ($q) => $q->where('failed_at', '>=', $this->processingStartedAt))
-            ->count();
+        if ($activeTasks === 0) {
+            $failedTasks = BackgroundTask::where('type', 'mockup')
+                ->where('status', 'failed')
+                ->when($this->processingStartedAt, fn ($q) => $q->where('created_at', '>=', $this->processingStartedAt))
+                ->count();
 
-        if ($pending === 0) {
             $this->processing = false;
             $this->processingStartedAt = null;
 
-            if ($failed > 0) {
-                $this->dispatch('toast', type: 'error', message: "{$failed} mockup job(s) failed.");
+            if ($failedTasks > 0) {
+                $this->dispatch('toast', type: 'error', message: "{$failedTasks} mockup job(s) failed.");
             } else {
                 $this->dispatch('toast', type: 'success', message: "All {$this->mockupTotal} mockup(s) generated.");
             }
@@ -260,11 +284,11 @@ class MockupGenerator extends Component
             return 0;
         }
 
-        $pending = DB::table('jobs')
-            ->where('payload', 'like', '%GenerateMockup%')
-            ->count();
+        $completed = BackgroundTask::where('type', 'mockup')
+            ->when($this->processingStartedAt, fn ($q) => $q->where('created_at', '>=', $this->processingStartedAt))
+            ->sum('completed_items');
 
-        return max(0, $this->mockupTotal - $pending);
+        return (int) min($completed, $this->mockupTotal);
     }
 
     // --- Download / Delete ---

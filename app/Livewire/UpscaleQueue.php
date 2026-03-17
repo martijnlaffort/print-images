@@ -3,6 +3,7 @@
 namespace App\Livewire;
 
 use App\Jobs\UpscaleImage;
+use App\Models\BackgroundTask;
 use App\Models\Poster;
 use App\Services\DpiValidator;
 use App\Services\UpscaleService;
@@ -57,6 +58,13 @@ class UpscaleQueue extends Component
         $colorAdjust = $this->getColorAdjust();
 
         foreach ($posters as $poster) {
+            $task = BackgroundTask::create([
+                'type' => 'upscale',
+                'name' => "Upscale: {$poster->title}",
+                'status' => 'pending',
+                'total_items' => 1,
+            ]);
+
             UpscaleImage::dispatch(
                 $poster,
                 $this->targetSize,
@@ -66,6 +74,7 @@ class UpscaleQueue extends Component
                 $this->sharpen,
                 $colorAdjust,
                 $this->tileSize,
+                $task->id,
             );
         }
 
@@ -81,6 +90,13 @@ class UpscaleQueue extends Component
         $poster = Poster::findOrFail($id);
         $colorAdjust = $this->getColorAdjust();
 
+        $task = BackgroundTask::create([
+            'type' => 'upscale',
+            'name' => "Upscale: {$poster->title}",
+            'status' => 'pending',
+            'total_items' => 1,
+        ]);
+
         UpscaleImage::dispatch(
             $poster,
             $this->targetSize,
@@ -90,6 +106,7 @@ class UpscaleQueue extends Component
             $this->sharpen,
             $colorAdjust,
             $this->tileSize,
+            $task->id,
         );
         $this->processing = true;
         $this->processingStartedAt = $this->processingStartedAt ?? now()->toDateTimeString();
@@ -103,21 +120,21 @@ class UpscaleQueue extends Component
 
     public function checkJobStatus(): void
     {
-        $pending = \Illuminate\Support\Facades\DB::table('jobs')
-            ->where('payload', 'like', '%UpscaleImage%')
+        $activeTasks = BackgroundTask::where('type', 'upscale')
+            ->active()
             ->count();
 
-        $failed = \Illuminate\Support\Facades\DB::table('failed_jobs')
-            ->where('payload', 'like', '%UpscaleImage%')
-            ->when($this->processingStartedAt, fn ($q) => $q->where('failed_at', '>=', $this->processingStartedAt))
-            ->count();
+        if ($activeTasks === 0) {
+            $failedTasks = BackgroundTask::where('type', 'upscale')
+                ->where('status', 'failed')
+                ->when($this->processingStartedAt, fn ($q) => $q->where('created_at', '>=', $this->processingStartedAt))
+                ->count();
 
-        if ($pending === 0) {
             $this->processing = false;
             $this->processingStartedAt = null;
 
-            if ($failed > 0) {
-                $this->dispatch('toast', type: 'error', message: "{$failed} upscale job(s) failed.");
+            if ($failedTasks > 0) {
+                $this->dispatch('toast', type: 'error', message: "{$failedTasks} upscale job(s) failed.");
             } else {
                 $this->dispatch('toast', type: 'success', message: 'All upscale jobs completed.');
             }

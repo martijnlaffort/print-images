@@ -17,6 +17,8 @@ class GenerateSizeVariants implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
+    public string $queue = 'export';
+
     public int $timeout = 300;
 
     public function __construct(
@@ -24,6 +26,7 @@ class GenerateSizeVariants implements ShouldQueue
         public array $sizes,
         public string $outputDir,
         public string $namingPattern = '{title}_{size}.png',
+        public ?int $backgroundTaskId = null,
     ) {}
 
     private function getMagickPath(): string
@@ -69,6 +72,19 @@ class GenerateSizeVariants implements ShouldQueue
                     "Failed to generate size variant {$sizeName}: " . $result->errorOutput()
                 );
             }
+        }
+
+        if ($this->backgroundTaskId) {
+            \App\Models\BackgroundTask::find($this->backgroundTaskId)
+                ?->incrementCompleted();
+        }
+    }
+
+    public function failed(\Throwable $e): void
+    {
+        if ($this->backgroundTaskId) {
+            \App\Models\BackgroundTask::find($this->backgroundTaskId)
+                ?->markFailed($e->getMessage());
         }
     }
 }

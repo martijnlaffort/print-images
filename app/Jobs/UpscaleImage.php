@@ -17,6 +17,8 @@ class UpscaleImage implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
+    public string $queue = 'upscale';
+
     public int $timeout = 600;
 
     public function __construct(
@@ -28,13 +30,21 @@ class UpscaleImage implements ShouldQueue
         public int $sharpen = 0,
         public array $colorAdjust = [],
         public int $tileSize = 0,
+        public ?int $backgroundTaskId = null,
     ) {}
 
     public function handle(UpscaleService $upscaleService, NamingService $namingService, DpiValidator $dpiValidator): void
     {
         set_time_limit(0);
 
+        $bgTask = $this->backgroundTaskId
+            ? \App\Models\BackgroundTask::find($this->backgroundTaskId)
+            : null;
+
+        $bgTask?->markRunning();
+
         $this->updateProgress('upscaling', 10);
+        $bgTask?->updateProgress('upscaling', 10);
 
         $outputFilename = $namingService->upscaledName($this->poster->slug);
         $outputPath = storage_path('app/upscaled/' . $outputFilename);
@@ -51,6 +61,7 @@ class UpscaleImage implements ShouldQueue
         }
 
         $this->updateProgress('upscaling', 30);
+        $bgTask?->updateProgress('upscaling', 30);
 
         $upscaleService->smartUpscale(
             $this->poster->original_path,
@@ -62,14 +73,16 @@ class UpscaleImage implements ShouldQueue
             $this->sharpen,
             $this->colorAdjust,
             $this->tileSize,
-            onProgress: function (int $percent) {
+            onProgress: function (int $percent) use ($bgTask) {
                 // Map 0-100% from smartUpscale to 30-90% overall
                 $mapped = 30 + (int) ($percent * 0.6);
                 $this->updateProgress('upscaling', $mapped);
+                $bgTask?->updateProgress('upscaling', $mapped);
             },
         );
 
         $this->updateProgress('finalizing', 90);
+        $bgTask?->updateProgress('finalizing', 90);
 
         $this->poster->update([
             'upscaled_path' => $outputPath,
@@ -77,6 +90,15 @@ class UpscaleImage implements ShouldQueue
         ]);
 
         $this->updateProgress('completed', 100);
+        $bgTask?->markCompleted();
+    }
+
+    public function failed(\Throwable $e): void
+    {
+        if ($this->backgroundTaskId) {
+            \App\Models\BackgroundTask::find($this->backgroundTaskId)
+                ?->markFailed($e->getMessage());
+        }
     }
 
     private function updateProgress(string $stage, int $percent): void

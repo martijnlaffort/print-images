@@ -1,4 +1,4 @@
-<div>
+<div @if($processing) wire:poll.3s="checkExportStatus" @endif>
     <div class="flex items-center justify-between mb-6">
         <h1 class="text-2xl font-bold text-gray-900">Export</h1>
         @if(count($selectedPosters) > 0)
@@ -14,6 +14,26 @@
             </button>
         @endif
     </div>
+
+    @if($processing)
+        <div class="mb-6 rounded-lg bg-green-50 border border-green-200 px-4 py-3">
+            <div class="flex items-center gap-3 mb-2">
+                <svg class="h-5 w-5 animate-spin text-green-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                <span class="text-sm font-medium text-green-700">
+                    Exporting... {{ $this->exportCompleted }}/{{ $exportTotal }} poster(s) done
+                </span>
+            </div>
+            <div class="w-full bg-green-100 rounded-full h-1.5">
+                <div
+                    class="h-1.5 rounded-full bg-green-500 transition-all duration-500"
+                    style="width: {{ $exportTotal > 0 ? ($this->exportCompleted / $exportTotal * 100) : 0 }}%"
+                ></div>
+            </div>
+        </div>
+    @endif
 
     <div class="grid grid-cols-3 gap-6">
         {{-- Left: Poster selector --}}
@@ -163,12 +183,18 @@
                     wire:click="exportAll"
                     wire:loading.attr="disabled"
                     wire:target="exportAll"
-                    @disabled(empty($selectedPosters) || empty($selectedSizes))
+                    @disabled(empty($selectedPosters) || empty($selectedSizes) || $processing)
                     class="w-full inline-flex items-center justify-center gap-2 rounded-lg bg-green-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                    <x-spinner wire:loading wire:target="exportAll" />
-                    <span wire:loading.remove wire:target="exportAll">Export All</span>
-                    <span wire:loading wire:target="exportAll">Exporting...</span>
+                    @if($processing)
+                        <svg class="h-4 w-4 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        Exporting...
+                    @else
+                        Export All
+                    @endif
                 </button>
             </div>
         </div>

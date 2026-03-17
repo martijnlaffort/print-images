@@ -17,6 +17,8 @@ class GenerateMockup implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
+    public string $queue = 'mockups';
+
     public int $timeout = 300;
 
     /**
@@ -30,6 +32,7 @@ class GenerateMockup implements ShouldQueue
         public int $outputQuality = 92,
         public string $framePreset = 'none',
         public ?array $textOverlay = null,
+        public ?int $backgroundTaskId = null,
     ) {}
 
     public function handle(MockupService $mockupService, NamingService $namingService): void
@@ -105,6 +108,19 @@ class GenerateMockup implements ShouldQueue
             if ($poster->status !== 'exported') {
                 $poster->update(['status' => 'mockups_ready']);
             }
+        }
+
+        if ($this->backgroundTaskId) {
+            \App\Models\BackgroundTask::find($this->backgroundTaskId)
+                ?->incrementCompleted();
+        }
+    }
+
+    public function failed(\Throwable $e): void
+    {
+        if ($this->backgroundTaskId) {
+            \App\Models\BackgroundTask::find($this->backgroundTaskId)
+                ?->markFailed($e->getMessage());
         }
     }
 }

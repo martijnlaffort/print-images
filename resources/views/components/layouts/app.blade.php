@@ -19,6 +19,11 @@
                                wire:navigate>
                                 Dashboard
                             </a>
+                            <a href="/pipeline"
+                               class="rounded-md px-3 py-2 text-sm font-medium {{ request()->is('pipeline') ? 'bg-indigo-100 text-indigo-900' : 'text-indigo-600 hover:bg-indigo-50 hover:text-indigo-700' }}"
+                               wire:navigate>
+                                Pipeline
+                            </a>
                             <a href="/upscale"
                                class="rounded-md px-3 py-2 text-sm font-medium {{ request()->is('upscale') ? 'bg-gray-100 text-gray-900' : 'text-gray-500 hover:bg-gray-50 hover:text-gray-900' }}"
                                wire:navigate>
@@ -45,6 +50,9 @@
                                 Settings
                             </a>
                         </div>
+                    </div>
+                    <div class="flex items-center">
+                        @livewire('task-status-indicator')
                     </div>
                 </div>
             </div>

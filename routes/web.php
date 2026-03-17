@@ -3,6 +3,7 @@
 use App\Livewire\BatchExporter;
 use App\Livewire\Dashboard;
 use App\Livewire\MockupGenerator;
+use App\Livewire\QuickPipeline;
 use App\Livewire\Settings;
 use App\Livewire\TemplateEditor;
 use App\Livewire\TemplateList;
@@ -17,6 +18,7 @@ Route::get('/mockups', MockupGenerator::class);
 Route::get('/templates', TemplateList::class);
 Route::get('/templates/create', TemplateEditor::class);
 Route::get('/templates/{id}/edit', TemplateEditor::class);
+Route::get('/pipeline', QuickPipeline::class);
 Route::get('/export', BatchExporter::class);
 Route::get('/settings', Settings::class);
 
