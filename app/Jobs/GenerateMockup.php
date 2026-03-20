@@ -18,8 +18,6 @@ class GenerateMockup implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
-    public string $queue = 'mockups';
-
     public int $timeout = 300;
 
     /**
@@ -34,7 +32,9 @@ class GenerateMockup implements ShouldQueue
         public string $framePreset = 'none',
         public ?array $textOverlay = null,
         public ?int $backgroundTaskId = null,
-    ) {}
+    ) {
+        $this->queue = 'mockups';
+    }
 
     public function handle(MockupService $mockupService, NamingService $namingService): void
     {

@@ -23,15 +23,15 @@ class ProcessPipeline implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
-    public string $queue = 'upscale';
-
     public int $timeout = 0;
 
     public function __construct(
         public array $posterIds,
         public array $config,
         public int $backgroundTaskId,
-    ) {}
+    ) {
+        $this->queue = 'upscale';
+    }
 
     public function handle(
         UpscaleService $upscaleService,

@@ -18,8 +18,6 @@ class GenerateSizeVariants implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
-    public string $queue = 'export';
-
     public int $timeout = 300;
 
     public function __construct(
@@ -28,7 +26,9 @@ class GenerateSizeVariants implements ShouldQueue
         public string $outputDir,
         public string $namingPattern = '{title}_{size}.png',
         public ?int $backgroundTaskId = null,
-    ) {}
+    ) {
+        $this->queue = 'export';
+    }
 
     private function getMagickPath(): string
     {

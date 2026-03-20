@@ -18,8 +18,6 @@ class UpscaleImage implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
-    public string $queue = 'upscale';
-
     public int $timeout = 600;
 
     public function __construct(
@@ -32,7 +30,9 @@ class UpscaleImage implements ShouldQueue
         public array $colorAdjust = [],
         public int $tileSize = 0,
         public ?int $backgroundTaskId = null,
-    ) {}
+    ) {
+        $this->queue = 'upscale';
+    }
 
     public function handle(UpscaleService $upscaleService, NamingService $namingService, DpiValidator $dpiValidator): void
     {
