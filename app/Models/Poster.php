@@ -20,10 +20,12 @@ class Poster extends Model
         'status',
         'metadata',
         'file_hash',
+        'pushed_at',
     ];
 
     protected $casts = [
         'metadata' => 'array',
+        'pushed_at' => 'datetime',
     ];
 
     public function generatedMockups(): HasMany

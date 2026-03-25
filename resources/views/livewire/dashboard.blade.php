@@ -235,15 +235,23 @@
                     <div class="p-3">
                         <p class="truncate text-sm font-medium text-gray-900">{{ $poster->title }}</p>
                         <div class="mt-1 flex items-center justify-between">
-                            <span @class([
-                                'inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium',
-                                'bg-gray-100 text-gray-700' => $poster->status === 'imported',
-                                'bg-blue-100 text-blue-700' => $poster->status === 'upscaled',
-                                'bg-purple-100 text-purple-700' => $poster->status === 'mockups_ready',
-                                'bg-green-100 text-green-700' => $poster->status === 'exported',
-                            ])>
-                                {{ str_replace('_', ' ', $poster->status) }}
-                            </span>
+                            <div class="flex items-center gap-1">
+                                <span @class([
+                                    'inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium',
+                                    'bg-gray-100 text-gray-700' => $poster->status === 'imported',
+                                    'bg-blue-100 text-blue-700' => $poster->status === 'upscaled',
+                                    'bg-purple-100 text-purple-700' => $poster->status === 'mockups_ready',
+                                    'bg-green-100 text-green-700' => $poster->status === 'exported',
+                                ])>
+                                    {{ str_replace('_', ' ', $poster->status) }}
+                                </span>
+                                @if($poster->pushed_at)
+                                    <span class="inline-flex items-center gap-0.5 rounded-full bg-emerald-100 text-emerald-700 px-2 py-0.5 text-xs font-medium" title="Pushed {{ $poster->pushed_at->diffForHumans() }}">
+                                        <svg class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>
+                                        Pushed
+                                    </span>
+                                @endif
+                            </div>
                             <div class="flex items-center gap-1">
                                 <button
                                     wire:click="showHistory({{ $poster->id }})"
@@ -449,6 +457,32 @@
                             @endif
                         @endif
                     </div>
+                </div>
+
+                {{-- Push to Webshop --}}
+                <div class="border-b px-6 py-4">
+                    @if($dp->pushed_at)
+                        <div class="flex items-center gap-2 rounded-lg bg-emerald-50 border border-emerald-200 px-4 py-2.5 mb-3">
+                            <svg class="h-4 w-4 text-emerald-600 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                            </svg>
+                            <span class="text-sm text-emerald-700">Pushed {{ $dp->pushed_at->diffForHumans() }}</span>
+                        </div>
+                    @endif
+                    <button
+                        wire:click="pushToShop({{ $dp->id }})"
+                        wire:loading.attr="disabled"
+                        wire:target="pushToShop"
+                        @if($dp->pushed_at) wire:confirm="This poster was already pushed {{ $dp->pushed_at->diffForHumans() }}. Push again?" @endif
+                        class="w-full inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium text-white disabled:opacity-50 transition-colors {{ $dp->pushed_at ? 'bg-gray-500 hover:bg-gray-600' : 'bg-emerald-600 hover:bg-emerald-700' }}"
+                    >
+                        <svg wire:loading.remove wire:target="pushToShop" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                        </svg>
+                        <x-spinner wire:loading wire:target="pushToShop" class="h-4 w-4" />
+                        <span wire:loading.remove wire:target="pushToShop">{{ $dp->pushed_at ? 'Push Again' : 'Push to Webshop' }}</span>
+                        <span wire:loading wire:target="pushToShop">Pushing...</span>
+                    </button>
                 </div>
 
                 {{-- Generated Mockups --}}

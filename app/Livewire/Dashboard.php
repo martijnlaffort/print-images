@@ -5,6 +5,7 @@ namespace App\Livewire;
 use App\Models\BackgroundTask;
 use App\Models\Poster;
 use App\Models\PosterActivity;
+use App\Services\ShopService;
 use Livewire\Attributes\Validate;
 use Livewire\Component;
 use Livewire\WithFileUploads;
@@ -318,6 +319,64 @@ class Dashboard extends Component
             ->when($this->search, fn ($q) => $q->where('title', 'like', "%{$this->search}%"))
             ->orderByDesc('created_at')
             ->paginate(24);
+    }
+
+    public function pushToShop(int $id): void
+    {
+        $poster = Poster::with('generatedMockups')->find($id);
+
+        if (! $poster) {
+            $this->dispatch('toast', type: 'error', message: 'Poster not found.');
+
+            return;
+        }
+
+        try {
+            $shop = ShopService::make();
+            $shop->authenticate();
+
+            $result = $shop->createProduct([
+                'title_nl' => $poster->title,
+                'title_en' => $poster->title,
+                'active' => false,
+            ]);
+
+            $productId = $result['id'];
+
+            // Upload upscaled image (or original) as main image
+            $mainImage = $poster->upscaled_path ?? $poster->original_path;
+            if ($mainImage && file_exists($mainImage)) {
+                $shop->uploadMedia($productId, $mainImage, 'main_image');
+            }
+
+            // Upload mockups as gallery images
+            foreach ($poster->generatedMockups as $mockup) {
+                if ($mockup->output_path && file_exists($mockup->output_path)) {
+                    $shop->uploadMedia($productId, $mockup->output_path, 'gallery');
+                }
+            }
+
+            $shopUrl = rtrim(config('shop.url'), '/');
+            $poster->update(['pushed_at' => now()]);
+
+            PosterActivity::log($poster->id, 'pushed_to_shop', [
+                'product_id' => $productId,
+                'slug' => $result['slug'] ?? null,
+            ]);
+
+            $this->dispatch('toast', type: 'success', message: "Pushed to webshop! Product ID: {$productId}");
+        } catch (\Throwable $e) {
+            $this->dispatch('toast', type: 'error', message: 'Push failed: ' . $e->getMessage());
+        }
+    }
+
+    public function importByPaths(array $paths): void
+    {
+        foreach ($paths as $path) {
+            if (file_exists($path)) {
+                \App\Models\Poster::createFromImport($path);
+            }
+        }
     }
 
     public function render()
