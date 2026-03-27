@@ -170,6 +170,7 @@ class TemplateEditor extends Component
             'category' => $this->category,
             'brightness_adjust' => $this->brightnessAdjust,
             'aspect_ratio' => $this->posterSlots[0]['aspect_ratio'] ?? $this->aspectRatio,
+            'corners' => $this->posterSlots[0]['corners'] ?? $this->corners,
         ];
 
         if ($this->backgroundImage) {

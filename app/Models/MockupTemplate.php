@@ -14,6 +14,7 @@ class MockupTemplate extends Model
         'background_path',
         'shadow_path',
         'frame_path',
+        'corners',
         'brightness_adjust',
         'aspect_ratio',
     ];
