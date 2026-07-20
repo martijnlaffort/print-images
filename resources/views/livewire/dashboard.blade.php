@@ -459,6 +459,36 @@
                     </div>
                 </div>
 
+                {{-- QC --}}
+                @php($qcReport = $dp->latestQcReport())
+                <div class="border-b px-6 py-4">
+                    <h3 class="text-sm font-semibold text-gray-900 mb-3">Kwaliteitscontrole</h3>
+                    @if($qcReport)
+                        <div class="flex items-center justify-between">
+                            <div>
+                                @if($qcReport->verdict === 'pass')
+                                    <span class="inline-flex items-center rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700">PRINT-KLAAR &#9989;</span>
+                                @elseif($qcReport->verdict === 'warn')
+                                    <span class="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700">WAARSCHUWING &#9888;&#65039;</span>
+                                @else
+                                    <span class="inline-flex items-center rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700">NIET PRINTEN &#10060;</span>
+                                @endif
+                                <span class="ml-2 text-xs text-gray-400">{{ $qcReport->created_at->format('d-m-Y H:i') }}</span>
+                                @if($qcReport->reasons)
+                                    <ul class="mt-2 list-disc pl-4 text-xs text-gray-600">
+                                        @foreach(array_slice($qcReport->reasons, 0, 3) as $reason)
+                                            <li>{{ $reason }}</li>
+                                        @endforeach
+                                    </ul>
+                                @endif
+                            </div>
+                            <a href="/qc" wire:navigate class="text-xs font-medium text-teal-600 hover:text-teal-800 shrink-0">Volledig rapport &rarr;</a>
+                        </div>
+                    @else
+                        <p class="text-xs text-gray-400">Nog geen QC-rapport. <a href="/qc" wire:navigate class="text-teal-600 hover:text-teal-800 font-medium">Naar QC &rarr;</a></p>
+                    @endif
+                </div>
+
                 {{-- Push to Webshop --}}
                 <div class="border-b px-6 py-4">
                     @if($dp->pushed_at)

@@ -3,6 +3,7 @@
 use App\Livewire\BatchExporter;
 use App\Livewire\Dashboard;
 use App\Livewire\MockupGenerator;
+use App\Livewire\QualityControl;
 use App\Livewire\QuickPipeline;
 use App\Livewire\Settings;
 use App\Livewire\TemplateEditor;
@@ -20,7 +21,21 @@ Route::get('/templates/create', TemplateEditor::class);
 Route::get('/templates/{id}/edit', TemplateEditor::class);
 Route::get('/pipeline', QuickPipeline::class);
 Route::get('/export', BatchExporter::class);
+Route::get('/qc', QualityControl::class);
 Route::get('/settings', Settings::class);
+
+Route::get('/qc-image/{report}', function (\App\Models\QcReport $report) {
+    $path = $report->comparison_image_path;
+
+    if (! $path || ! file_exists($path)) {
+        abort(404);
+    }
+
+    return response()->file($path, [
+        'Content-Type' => mime_content_type($path),
+        'Cache-Control' => 'public, max-age=3600',
+    ]);
+})->name('qc.image');
 
 Route::get('/poster-image/{poster}', function (Poster $poster, Request $request) {
     $type = $request->query('type', 'original'); // original, upscaled, thumbnail

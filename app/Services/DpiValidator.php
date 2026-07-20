@@ -10,17 +10,45 @@ class DpiValidator
         'A4' => ['width_cm' => 21.0, 'height_cm' => 29.7],
         'A3' => ['width_cm' => 29.7, 'height_cm' => 42.0],
         'A2' => ['width_cm' => 42.0, 'height_cm' => 59.4],
-        '50x70' => ['width_cm' => 50.0, 'height_cm' => 70.0],
+        '21x30' => ['width_cm' => 21.0, 'height_cm' => 30.0],
         '30x40' => ['width_cm' => 30.0, 'height_cm' => 40.0],
+        '40x50' => ['width_cm' => 40.0, 'height_cm' => 50.0],
+        '50x70' => ['width_cm' => 50.0, 'height_cm' => 70.0],
+        '70x100' => ['width_cm' => 70.0, 'height_cm' => 100.0],
     ];
 
     const PIXELS_AT_300DPI = [
         'A4' => ['width' => 2480, 'height' => 3508],
         'A3' => ['width' => 3508, 'height' => 4960],
         'A2' => ['width' => 4960, 'height' => 7016],
-        '50x70' => ['width' => 5906, 'height' => 8268],
+        '21x30' => ['width' => 2480, 'height' => 3543],
         '30x40' => ['width' => 3543, 'height' => 4724],
+        '40x50' => ['width' => 4724, 'height' => 5906],
+        '50x70' => ['width' => 5906, 'height' => 8268],
+        '70x100' => ['width' => 8268, 'height' => 11811],
     ];
+
+    /**
+     * Effective DPI per dimension for a pixel size on a print size.
+     * Returns ['width_dpi' => ..., 'height_dpi' => ..., 'min_dpi' => ...].
+     */
+    public function effectiveDpiFor(int $pixelW, int $pixelH, string $sizeName): ?array
+    {
+        $sizes = $this->allSizes();
+        if (! isset($sizes[$sizeName])) {
+            return null;
+        }
+
+        $spec = $sizes[$sizeName];
+        $dpiW = $pixelW / ($spec['width_cm'] / 2.54);
+        $dpiH = $pixelH / ($spec['height_cm'] / 2.54);
+
+        return [
+            'width_dpi' => round($dpiW),
+            'height_dpi' => round($dpiH),
+            'min_dpi' => round(min($dpiW, $dpiH)),
+        ];
+    }
 
     public function allSizes(): array
     {

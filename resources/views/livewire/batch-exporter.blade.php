@@ -142,19 +142,9 @@
             <div class="rounded-lg bg-white border border-gray-200 p-4 space-y-4">
                 <div>
                     <label class="block text-sm font-medium text-gray-700 mb-1">Output Format</label>
-                    <select wire:model="outputFormat" class="w-full rounded-lg border-gray-300 text-sm focus:border-green-500 focus:ring-green-500">
-                        <option value="png">PNG (lossless)</option>
-                        <option value="jpg">JPEG (smaller files)</option>
-                    </select>
+                    <p class="text-sm text-gray-700">PNG (lossless)</p>
+                    <p class="mt-1 text-xs text-gray-500">Print-bestanden zijn altijd PNG met ingebed sRGB-profiel &mdash; geen JPEG in de printketen.</p>
                 </div>
-
-                @if($outputFormat === 'jpg')
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-1">JPEG Quality: {{ $outputQuality }}%</label>
-                        <input type="range" wire:model.live="outputQuality" min="60" max="100" step="1"
-                            class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-green-600">
-                    </div>
-                @endif
 
                 <div>
                     <label class="block text-sm font-medium text-gray-700 mb-1">Naming Pattern</label>

@@ -71,6 +71,37 @@
             @endif
         </div>
 
+        {{-- Stage 0: Denoise (voor upscaling) --}}
+        <div class="rounded-lg bg-white shadow-sm border border-gray-200 overflow-hidden">
+            <div class="flex items-center justify-between px-5 py-3 border-b border-gray-100 bg-gray-50">
+                <label class="flex items-center gap-3">
+                    <input type="checkbox" wire:model.live="enableDenoise" class="rounded border-gray-300 text-teal-600 focus:ring-teal-500">
+                    <div class="flex items-center gap-2">
+                        <span class="inline-flex items-center justify-center w-5 h-5 rounded-full bg-teal-100 text-teal-700 text-xs font-bold">0</span>
+                        <span class="text-sm font-semibold text-gray-700 uppercase tracking-wide">Denoise (bron)</span>
+                    </div>
+                </label>
+                <span class="text-[11px] text-gray-400">Draait v&oacute;&oacute;r het upscalen &middot; origineel blijft ongewijzigd</span>
+            </div>
+
+            @if($enableDenoise)
+                <div class="p-5">
+                    <label class="block text-xs font-medium text-gray-500 mb-1.5">Sterkte</label>
+                    <div class="flex gap-2">
+                        @foreach(['light' => 'Licht', 'normal' => 'Normaal', 'strong' => 'Sterk'] as $key => $label)
+                            <button
+                                wire:click="$set('denoiseStrength', '{{ $key }}')"
+                                class="rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors {{ $denoiseStrength === $key ? 'border-teal-300 bg-teal-50 text-teal-700' : 'border-gray-200 bg-white text-gray-700 hover:bg-gray-50' }}"
+                            >
+                                {{ $label }}
+                            </button>
+                        @endforeach
+                    </div>
+                    <p class="mt-2 text-[11px] text-gray-400">Wavelet-denoise: verwijdert korrel met behoud van randen. Het QC-rapport toont het v&oacute;&oacute;r/n&aacute;-effect en waarschuwt bij detailverlies.</p>
+                </div>
+            @endif
+        </div>
+
         {{-- Stage 1: Upscale --}}
         <div class="rounded-lg bg-white shadow-sm border border-gray-200 overflow-hidden">
             <div class="flex items-center justify-between px-5 py-3 border-b border-gray-100 bg-gray-50">
@@ -143,7 +174,7 @@
                         <summary class="cursor-pointer text-xs font-medium text-gray-500 hover:text-gray-700">Advanced Settings</summary>
                         <div class="mt-3 grid grid-cols-2 lg:grid-cols-5 gap-4">
                             <div>
-                                <label class="block text-xs text-gray-500 mb-1">Denoise ({{ $denoise }}%)</label>
+                                <label class="block text-xs text-gray-500 mb-1" title="Mengt het AI-resultaat met een klassieke upscale om AI-artefacten te dempen. Dit is geen ruisverwijdering - gebruik daarvoor de Denoise-stap.">AI-blend ({{ $denoise }}%)</label>
                                 <input type="range" wire:model.live="denoise" min="0" max="100" class="w-full accent-indigo-500">
                             </div>
                             <div>
@@ -315,10 +346,7 @@
                         <div class="mt-3 grid grid-cols-2 gap-4">
                             <div>
                                 <label class="block text-xs text-gray-500 mb-1">Format</label>
-                                <select wire:model.live="exportFormat" class="w-full rounded-lg border-gray-300 text-sm focus:border-indigo-500 focus:ring-indigo-500">
-                                    <option value="png">PNG</option>
-                                    <option value="jpg">JPEG</option>
-                                </select>
+                                <p class="text-sm text-gray-700 py-1.5">PNG <span class="text-[11px] text-gray-400">(print-bestanden zijn altijd PNG met sRGB-profiel)</span></p>
                             </div>
                             <div>
                                 <label class="block text-xs text-gray-500 mb-1">Quality ({{ $exportQuality }})</label>

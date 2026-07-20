@@ -40,6 +40,29 @@
         </div>
     </div>
 
+    {{-- Denoise (bron) --}}
+    <div class="mb-4 rounded-lg bg-white p-5 shadow-sm border border-gray-200">
+        <div class="flex items-center gap-4">
+            <label class="flex items-center gap-2">
+                <input type="checkbox" wire:model.live="preDenoise" class="rounded border-gray-300 text-teal-600 focus:ring-teal-500">
+                <span class="text-sm font-semibold text-gray-700 uppercase tracking-wide">Denoise bron v&oacute;&oacute;r upscale</span>
+            </label>
+            @if($preDenoise)
+                <div class="flex gap-2">
+                    @foreach(['light' => 'Licht', 'normal' => 'Normaal', 'strong' => 'Sterk'] as $key => $label)
+                        <button
+                            wire:click="$set('preDenoiseStrength', '{{ $key }}')"
+                            class="rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors {{ $preDenoiseStrength === $key ? 'border-teal-300 bg-teal-50 text-teal-700' : 'border-gray-200 bg-white text-gray-700 hover:bg-gray-50' }}"
+                        >
+                            {{ $label }}
+                        </button>
+                    @endforeach
+                </div>
+                <span class="text-[11px] text-gray-400">Wavelet-denoise op het bronbestand; origineel blijft ongewijzigd. QC meet v&oacute;&oacute;r/n&aacute;.</span>
+            @endif
+        </div>
+    </div>
+
     {{-- Controls --}}
     <div class="mb-6 rounded-lg bg-white p-5 shadow-sm border border-gray-200">
         <h2 class="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-4">Upscale Settings</h2>
@@ -69,7 +92,7 @@
                 </select>
             </div>
             <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">Denoise: {{ $denoise }}%</label>
+                <label class="block text-sm font-medium text-gray-700 mb-1" title="Mengt het AI-resultaat met een klassieke upscale om AI-artefacten te dempen. Dit is geen ruisverwijdering - gebruik daarvoor de Denoise-stap hierboven.">AI-blend: {{ $denoise }}%</label>
                 <input type="range" wire:model.live="denoise" min="0" max="100" step="10"
                     class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-indigo-600">
                 <div class="flex justify-between text-xs text-gray-400 mt-0.5">

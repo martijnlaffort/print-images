@@ -15,7 +15,6 @@ class BatchExporter extends Component
     public array $selectedSizes = ['A4', 'A3'];
     public string $outputDir = '';
     public string $namingPattern = '{title}_{size}.png';
-    public string $outputFormat = 'png';
     public int $outputQuality = 92;
     public array $dpiResults = [];
     public bool $processing = false;
@@ -73,9 +72,8 @@ class BatchExporter extends Component
             mkdir($outputDir, 0755, true);
         }
 
-        // Adjust naming pattern extension to match format
-        $ext = $this->outputFormat === 'jpg' ? 'jpg' : 'png';
-        $pattern = preg_replace('/\.\w+$/', ".{$ext}", $this->namingPattern);
+        // Print exports are always PNG — no JPEG in the print chain.
+        $pattern = preg_replace('/\.\w+$/', '.png', $this->namingPattern);
 
         $posters = Poster::whereIn('id', $this->selectedPosters)->get();
         $count = $posters->count();
@@ -114,13 +112,14 @@ class BatchExporter extends Component
             $failedTasks = BackgroundTask::where('type', 'export')
                 ->where('status', 'failed')
                 ->when($this->processingStartedAt, fn ($q) => $q->where('created_at', '>=', $this->processingStartedAt))
-                ->count();
+                ->get();
 
             $this->processing = false;
             $this->processingStartedAt = null;
 
-            if ($failedTasks > 0) {
-                $this->dispatch('toast', type: 'error', message: "{$failedTasks} export job(s) failed.");
+            if ($failedTasks->isNotEmpty()) {
+                $firstError = $failedTasks->first()->error_message ?? 'Onbekende fout';
+                $this->dispatch('toast', type: 'error', message: "{$failedTasks->count()} export(s) mislukt: {$firstError}");
             } else {
                 // Mark posters as exported
                 Poster::whereIn('id', $this->selectedPosters)->update(['status' => 'exported']);

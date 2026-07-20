@@ -12,9 +12,11 @@ use Livewire\Component;
 
 class UpscaleQueue extends Component
 {
-    public string $targetSize = '50x70';
+    public string $targetSize = '70x100';
     public int $targetDpi = 300;
     public string $model = 'realesrgan-x4plus';
+    public bool $preDenoise = true;
+    public string $preDenoiseStrength = 'normal';
     public int $denoise = 50;
     public int $sharpen = 0;
     public int $tileSize = 0;
@@ -26,6 +28,13 @@ class UpscaleQueue extends Component
     public bool $processing = false;
     public ?string $processingStartedAt = null;
     public ?int $comparePoster = null;
+
+    public function mount(): void
+    {
+        $this->preDenoise = (bool) config('posterforge.denoise.default_enabled', true);
+        $this->preDenoiseStrength = config('posterforge.denoise.default_strength', 'normal');
+        $this->targetSize = config('posterforge.upscale.default_target_size', '70x100');
+    }
 
     public function applyPreset(string $preset): void
     {
@@ -75,6 +84,8 @@ class UpscaleQueue extends Component
                 $colorAdjust,
                 $this->tileSize,
                 $task->id,
+                $this->preDenoise,
+                $this->preDenoiseStrength,
             );
         }
 
@@ -107,6 +118,8 @@ class UpscaleQueue extends Component
             $colorAdjust,
             $this->tileSize,
             $task->id,
+            $this->preDenoise,
+            $this->preDenoiseStrength,
         );
         $this->processing = true;
         $this->processingStartedAt = $this->processingStartedAt ?? now()->toDateTimeString();

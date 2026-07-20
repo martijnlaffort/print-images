@@ -44,6 +44,11 @@
                                wire:navigate>
                                 Export
                             </a>
+                            <a href="/qc"
+                               class="rounded-md px-3 py-2 text-sm font-medium {{ request()->is('qc') ? 'bg-teal-100 text-teal-900' : 'text-teal-600 hover:bg-teal-50 hover:text-teal-700' }}"
+                               wire:navigate>
+                                QC
+                            </a>
                             <a href="/settings"
                                class="rounded-md px-3 py-2 text-sm font-medium {{ request()->is('settings') ? 'bg-gray-100 text-gray-900' : 'text-gray-500 hover:bg-gray-50 hover:text-gray-900' }}"
                                wire:navigate>

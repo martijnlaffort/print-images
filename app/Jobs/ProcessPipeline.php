@@ -7,9 +7,13 @@ use App\Models\GeneratedMockup;
 use App\Models\MockupTemplate;
 use App\Models\Poster;
 use App\Models\PosterActivity;
+use App\Services\DenoiseService;
 use App\Services\DpiValidator;
+use App\Services\ImageFinalizer;
+use App\Services\MagickService;
 use App\Services\MockupService;
 use App\Services\NamingService;
+use App\Services\QualityControlService;
 use App\Services\UpscaleService;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -38,6 +42,10 @@ class ProcessPipeline implements ShouldQueue
         NamingService $namingService,
         DpiValidator $dpiValidator,
         MockupService $mockupService,
+        DenoiseService $denoiseService,
+        QualityControlService $qcService,
+        ImageFinalizer $finalizer,
+        MagickService $magick,
     ): void {
         set_time_limit(0);
 
@@ -64,7 +72,7 @@ class ProcessPipeline implements ShouldQueue
 
                 $this->reportProgress($task, $currentStep, $totalSteps, "Upscaling: {$poster->title}");
 
-                $this->runUpscale($poster, $upscaleService, $namingService, $dpiValidator);
+                $this->runUpscale($poster, $upscaleService, $namingService, $dpiValidator, $denoiseService, $qcService, $finalizer);
                 $poster->refresh();
 
                 $currentStep++;
@@ -88,12 +96,26 @@ class ProcessPipeline implements ShouldQueue
             }
         }
 
-        // Stage 3: Export
+        // Stage 3: Export (QC gate: failing posters are skipped, never silently)
+        $blocked = [];
         if ($this->config['export']['enabled']) {
             foreach ($posters as $poster) {
+                $gate = $qcService->gateForExport($poster);
+
+                if ($gate->verdict === 'fail') {
+                    $blocked[] = $poster->title;
+                    PosterActivity::log($poster->id, 'export_blocked', [
+                        'qc_report_id' => $gate->id,
+                        'reasons' => $gate->reasons,
+                    ]);
+                    $currentStep++;
+                    $this->reportProgress($task, $currentStep, $totalSteps, "GEBLOKKEERD (QC: niet printen): {$poster->title}");
+                    continue;
+                }
+
                 $this->reportProgress($task, $currentStep, $totalSteps, "Exporting: {$poster->title}");
 
-                $this->runExport($poster, $namingService);
+                $this->runExport($poster, $namingService, $magick, $finalizer);
                 $poster->update(['status' => 'exported']);
 
                 $currentStep++;
@@ -110,11 +132,23 @@ class ProcessPipeline implements ShouldQueue
             PosterActivity::log($poster->id, 'pipeline_completed', ['stages' => $stages]);
         }
 
+        if ($blocked) {
+            $task->updateProgress(
+                'Klaar. Export geblokkeerd door QC voor: ' . implode(', ', $blocked),
+                99,
+            );
+        }
+
         $task->markCompleted();
     }
 
     public function failed(\Throwable $e): void
     {
+        // Clear progress caches so poster cards don't hang on a stale percentage.
+        foreach ($this->posterIds as $posterId) {
+            Cache::forget("upscale_progress_{$posterId}");
+        }
+
         BackgroundTask::find($this->backgroundTaskId)
             ?->markFailed($e->getMessage());
     }
@@ -169,9 +203,17 @@ class ProcessPipeline implements ShouldQueue
         $task->updateProgress($stage, min($percent, 99));
     }
 
-    private function runUpscale(Poster $poster, UpscaleService $upscaleService, NamingService $namingService, DpiValidator $dpiValidator): void
-    {
+    private function runUpscale(
+        Poster $poster,
+        UpscaleService $upscaleService,
+        NamingService $namingService,
+        DpiValidator $dpiValidator,
+        DenoiseService $denoiseService,
+        QualityControlService $qcService,
+        ImageFinalizer $finalizer,
+    ): void {
         $cfg = $this->config['upscale'];
+        $denoiseCfg = $this->config['denoise'] ?? ['enabled' => false, 'strength' => 'normal'];
 
         $outputFilename = $namingService->upscaledName($poster->slug);
         $outputPath = storage_path('app/upscaled/' . $outputFilename);
@@ -198,12 +240,66 @@ class ProcessPipeline implements ShouldQueue
 
         // Update cache progress for compatibility with UpscaleQueue page
         Cache::put("upscale_progress_{$poster->id}", [
+            'stage' => 'qc-bron',
+            'percent' => 5,
+        ], now()->addMinutes(30));
+
+        // ── QC on the untouched source ──
+        $sourceMetrics = $qcService->analyze($poster->original_path);
+        $qcService->runAndStore($poster->original_path, 'source', $poster->id, metrics: $sourceMetrics);
+
+        // ── Denoise before upscaling; the source file is never modified ──
+        $upscaleInput = $poster->original_path;
+
+        if ($denoiseCfg['enabled']) {
+            Cache::put("upscale_progress_{$poster->id}", [
+                'stage' => 'denoise',
+                'percent' => 15,
+            ], now()->addMinutes(30));
+
+            $denoisedPath = storage_path('app/denoised/' . $poster->slug . '_denoised.png');
+            $denoisedDir = dirname($denoisedPath);
+            if (! is_dir($denoisedDir)) {
+                mkdir($denoisedDir, 0755, true);
+            }
+
+            $denoiseService->denoise($poster->original_path, $denoisedPath, $denoiseCfg['strength']);
+
+            $denoisedMetrics = $qcService->analyze($denoisedPath);
+            $comparison = $qcService->compare($sourceMetrics, $denoisedMetrics);
+
+            $compareImagePath = null;
+            if ($sourceMetrics['flattest_block']) {
+                $compareImagePath = storage_path('app/qc/' . $poster->slug . '_denoise_compare.png');
+                $qcService->comparisonCrop($poster->original_path, $denoisedPath, $sourceMetrics['flattest_block'], $compareImagePath);
+            }
+
+            $qcService->runAndStore(
+                $denoisedPath,
+                'denoised',
+                $poster->id,
+                comparison: $comparison,
+                comparisonImagePath: $compareImagePath,
+                metrics: $denoisedMetrics,
+            );
+
+            PosterActivity::log($poster->id, 'denoised', [
+                'strength' => $denoiseCfg['strength'],
+                'noise_before' => $comparison['noise_before'],
+                'noise_after' => $comparison['noise_after'],
+                'detail_loss_percent' => $comparison['detail_loss_percent'],
+            ]);
+
+            $upscaleInput = $denoisedPath;
+        }
+
+        Cache::put("upscale_progress_{$poster->id}", [
             'stage' => 'upscaling',
-            'percent' => 10,
+            'percent' => 30,
         ], now()->addMinutes(30));
 
         $upscaleService->smartUpscale(
-            $poster->original_path,
+            $upscaleInput,
             $outputPath,
             $targetPixels['width'],
             $targetPixels['height'],
@@ -212,7 +308,12 @@ class ProcessPipeline implements ShouldQueue
             $cfg['sharpen'],
             $colorAdjust,
             $cfg['tileSize'] ?? 0,
+            $cfg['targetDpi'],
         );
+
+        // ── Embed ICC profile + true DPI, then final QC ──
+        $finalizer->finalize($outputPath, $cfg['targetDpi']);
+        $qcService->runAndStore($outputPath, 'output', $poster->id, requireIcc: true);
 
         $poster->update([
             'upscaled_path' => $outputPath,
@@ -274,7 +375,7 @@ class ProcessPipeline implements ShouldQueue
         }
     }
 
-    private function runExport(Poster $poster, NamingService $namingService): void
+    private function runExport(Poster $poster, NamingService $namingService, MagickService $magick, ImageFinalizer $finalizer): void
     {
         $cfg = $this->config['export'];
         $outputDir = $cfg['outputDir'];
@@ -283,16 +384,8 @@ class ProcessPipeline implements ShouldQueue
             mkdir($outputDir, 0755, true);
         }
 
-        $magick = match (PHP_OS_FAMILY) {
-            'Windows' => 'C:\\Program Files\\ImageMagick-7.1.2-Q16\\magick.exe',
-            default => 'magick',
-        };
-
         $sourcePath = $poster->upscaled_path ?? $poster->original_path;
         $dpiValidator = new DpiValidator();
-
-        $ext = $cfg['format'] === 'jpg' ? 'jpg' : 'png';
-        $pattern = preg_replace('/\.\w+$/', ".{$ext}", $cfg['namingPattern']);
 
         foreach ($cfg['sizes'] as $sizeName) {
             $pixels = $dpiValidator->pixelsAt300Dpi($sizeName);
@@ -300,16 +393,18 @@ class ProcessPipeline implements ShouldQueue
                 continue;
             }
 
-            $filename = $namingService->sizeVariantName($poster->slug, $sizeName);
+            // Print exports are always PNG — no JPEG in the print chain.
+            $filename = preg_replace('/\.\w+$/', '.png', $namingService->sizeVariantName($poster->slug, $sizeName));
             $outputPath = rtrim($outputDir, '/\\') . '/' . $filename;
 
             $result = Process::timeout(120)->run([
-                $magick,
+                $magick->path(),
                 $sourcePath,
                 '-filter', 'Lanczos',
                 '-resize', "{$pixels['width']}x{$pixels['height']}",
                 '-density', '300',
                 '-units', 'PixelsPerInch',
+                ...$finalizer->profileArgs(),
                 $outputPath,
             ]);
 

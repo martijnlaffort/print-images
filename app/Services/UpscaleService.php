@@ -7,6 +7,10 @@ use RuntimeException;
 
 class UpscaleService
 {
+    public function __construct(
+        private MagickService $magick,
+    ) {}
+
     public function upscale(
         string $inputPath,
         string $outputPath,
@@ -16,7 +20,7 @@ class UpscaleService
         int $tileSize = 0,
     ): string {
         $binary = $this->getBinaryPath();
-        $magick = $this->getMagickPath();
+        $magick = $this->magick->path();
         $tempDir = sys_get_temp_dir();
         $aiOutput = $tempDir . '/upscale_ai_' . uniqid() . '.png';
 
@@ -103,9 +107,9 @@ class UpscaleService
         int $sharpen = 0,
         array $colorAdjust = [],
         int $tileSize = 0,
+        int $targetDpi = 300,
         ?\Closure $onProgress = null,
     ): string {
-        $magick = $this->getMagickPath();
         [$origWidth, $origHeight] = $this->getImageDimensions($inputPath);
 
         // Calculate required scale factor (use the larger dimension ratio)
@@ -118,7 +122,7 @@ class UpscaleService
         // If image already meets target, just resize to exact dimensions
         if ($requiredScale <= 1.0) {
             $report(80);
-            $this->resizeToExact($inputPath, $outputPath, $targetWidth, $targetHeight);
+            $this->resizeToExact($inputPath, $outputPath, $targetWidth, $targetHeight, $targetDpi);
             return $outputPath;
         }
 
@@ -160,7 +164,7 @@ class UpscaleService
                 $tempFiles[] = $preSharpPath;
             }
 
-            $this->resizeToExact($currentInput, $preSharpPath, $targetWidth, $targetHeight);
+            $this->resizeToExact($currentInput, $preSharpPath, $targetWidth, $targetHeight, $targetDpi);
 
             $report(80);
 
@@ -237,39 +241,13 @@ class UpscaleService
         return file_exists($this->getBinaryPath());
     }
 
-    private function getMagickPath(): string
+    private function resizeToExact(string $input, string $output, int $width, int $height, int $dpi = 300): void
     {
-        $configured = config('posterforge.imagemagick_path');
-        if ($configured) {
-            return $configured;
-        }
-
-        if (PHP_OS_FAMILY === 'Windows') {
-            // Search common installation directories
-            $globPattern = 'C:\\Program Files\\ImageMagick-*\\magick.exe';
-            $matches = glob($globPattern);
-            if (!empty($matches)) {
-                return $matches[0];
-            }
-
-            throw new RuntimeException(
-                'ImageMagick not found. Install it from https://imagemagick.org/script/download.php#windows '
-                . 'or set IMAGEMAGICK_PATH in your .env file.'
-            );
-        }
-
-        return 'magick';
-    }
-
-    private function resizeToExact(string $input, string $output, int $width, int $height): void
-    {
-        $magick = $this->getMagickPath();
-
         $result = Process::timeout(120)->run([
-            $magick, $input,
+            $this->magick->path(), $input,
             '-filter', 'Lanczos',
             '-resize', "{$width}x{$height}!",
-            '-density', '300',
+            '-density', (string) $dpi,
             '-units', 'PixelsPerInch',
             $output,
         ]);
@@ -281,7 +259,7 @@ class UpscaleService
 
     private function applyColorAdjust(string $input, string $output, array $adjust): void
     {
-        $magick = $this->getMagickPath();
+        $magick = $this->magick->path();
 
         $brightness = $adjust['brightness'] ?? 100;
         $contrast = $adjust['contrast'] ?? 0;
@@ -311,7 +289,7 @@ class UpscaleService
 
     private function applySharpen(string $input, string $output, int $strength): void
     {
-        $magick = $this->getMagickPath();
+        $magick = $this->magick->path();
 
         // USM: radiusxsigma+gain+threshold
         // Scale strength 1-100 to reasonable USM values

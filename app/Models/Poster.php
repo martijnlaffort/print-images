@@ -38,6 +38,16 @@ class Poster extends Model
         return $this->hasMany(PosterActivity::class);
     }
 
+    public function qcReports(): HasMany
+    {
+        return $this->hasMany(QcReport::class);
+    }
+
+    public function latestQcReport(): ?QcReport
+    {
+        return $this->qcReports()->orderByDesc('created_at')->first();
+    }
+
     public static function createFromImport(string $path): ?static
     {
         $hash = md5_file($path);

@@ -17,10 +17,14 @@ class QuickPipeline extends Component
     public array $selectedPosters = [];
     public bool $selectAll = true;
 
+    // Denoise (runs before upscaling, on the source)
+    public bool $enableDenoise = true;
+    public string $denoiseStrength = 'normal';
+
     // Upscale
     public bool $enableUpscale = true;
     public string $upscalePreset = 'standard';
-    public string $targetSize = '50x70';
+    public string $targetSize = '70x100';
     public int $targetDpi = 300;
     public string $model = 'realesrgan-x4plus';
     public int $denoise = 50;
@@ -40,10 +44,9 @@ class QuickPipeline extends Component
     public int $mockupQuality = 92;
     public string $framePreset = 'none';
 
-    // Export
+    // Export (always PNG — no JPEG in the print chain)
     public bool $enableExport = true;
-    public array $exportSizes = ['50x70'];
-    public string $exportFormat = 'png';
+    public array $exportSizes = ['70x100'];
     public int $exportQuality = 92;
     public string $outputDir = '';
 
@@ -54,6 +57,10 @@ class QuickPipeline extends Component
     public function mount(): void
     {
         $this->outputDir = Setting::get('export.default_dir', storage_path('app/exports'));
+        $this->enableDenoise = (bool) config('posterforge.denoise.default_enabled', true);
+        $this->denoiseStrength = config('posterforge.denoise.default_strength', 'normal');
+        $this->targetSize = config('posterforge.upscale.default_target_size', '70x100');
+        $this->exportSizes = [config('posterforge.upscale.default_target_size', '70x100')];
 
         // Select all posters by default
         $this->selectedPosters = Poster::pluck('id')
@@ -157,6 +164,10 @@ class QuickPipeline extends Component
         ]);
 
         $config = [
+            'denoise' => [
+                'enabled' => $this->enableDenoise,
+                'strength' => $this->denoiseStrength,
+            ],
             'upscale' => [
                 'enabled' => $this->enableUpscale,
                 'targetSize' => $this->targetSize,
@@ -182,7 +193,7 @@ class QuickPipeline extends Component
             'export' => [
                 'enabled' => $this->enableExport,
                 'sizes' => $this->exportSizes,
-                'format' => $this->exportFormat,
+                'format' => 'png',
                 'quality' => $this->exportQuality,
                 'outputDir' => $this->outputDir ?: storage_path('app/exports'),
                 'namingPattern' => Setting::get('naming.size_variant', config('posterforge.naming.size_variant', '{title}_{size}.png')),
@@ -270,6 +281,7 @@ class QuickPipeline extends Component
             'posters' => $this->posters,
             'templates' => $this->templates,
             'categories' => $this->categories,
+            'binaryAvailable' => $this->binaryAvailable,
             'printSizes' => $validator->allSizes(),
             'models' => config('posterforge.upscale.models'),
             'pipelineProgress' => $this->pipelineProgress,
