@@ -81,10 +81,16 @@
                         <span class="text-sm font-semibold text-gray-700 uppercase tracking-wide">Denoise (bron)</span>
                     </div>
                 </label>
-                <span class="text-[11px] text-gray-400">Draait v&oacute;&oacute;r het upscalen &middot; origineel blijft ongewijzigd</span>
+                <span class="text-[11px] text-gray-400">
+                    @if($auto && $enableUpscale)
+                        Automatische modus bepaalt dit per afbeelding
+                    @else
+                        Draait v&oacute;&oacute;r het upscalen &middot; origineel blijft ongewijzigd
+                    @endif
+                </span>
             </div>
 
-            @if($enableDenoise)
+            @if($enableDenoise && !($auto && $enableUpscale))
                 <div class="p-5">
                     <label class="block text-xs font-medium text-gray-500 mb-1.5">Sterkte</label>
                     <div class="flex gap-2">
@@ -119,7 +125,19 @@
 
             @if($enableUpscale)
                 <div class="p-5 space-y-4">
+                    {{-- Automatische modus --}}
+                    <div class="rounded-lg border p-3 {{ $auto ? 'border-emerald-300 bg-emerald-50' : 'border-gray-200' }}">
+                        <label class="flex items-center gap-2">
+                            <input type="checkbox" wire:model.live="auto" class="rounded border-gray-300 text-emerald-600 focus:ring-emerald-500">
+                            <span class="text-xs font-semibold uppercase tracking-wide {{ $auto ? 'text-emerald-800' : 'text-gray-700' }}">Automatische instellingen per afbeelding</span>
+                        </label>
+                        <p class="mt-1 text-[11px] {{ $auto ? 'text-emerald-700' : 'text-gray-400' }}">
+                            Kiest per afbeelding het beste model en de beste instellingen via een mini-benchmark; weigert onhaalbare formaten eerlijk.
+                        </p>
+                    </div>
+
                     {{-- Presets --}}
+                    @if(!$auto)
                     <div>
                         <label class="block text-xs font-medium text-gray-500 mb-1.5">Preset</label>
                         <div class="flex gap-2">
@@ -133,6 +151,7 @@
                             @endforeach
                         </div>
                     </div>
+                    @endif
 
                     <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
                         <div>
@@ -151,6 +170,7 @@
                                 <option value="350">350 (High Quality)</option>
                             </select>
                         </div>
+                        @if(!$auto)
                         <div>
                             <label class="block text-xs font-medium text-gray-500 mb-1">AI Model</label>
                             <select wire:model.live="model" class="w-full rounded-lg border-gray-300 text-sm focus:border-indigo-500 focus:ring-indigo-500">
@@ -159,6 +179,7 @@
                                 @endforeach
                             </select>
                         </div>
+                        @endif
                         <div>
                             <label class="block text-xs font-medium text-gray-500 mb-1">GPU Tile Size</label>
                             <select wire:model.live="tileSize" class="w-full rounded-lg border-gray-300 text-sm focus:border-indigo-500 focus:ring-indigo-500">
@@ -173,6 +194,7 @@
                     <details class="text-sm">
                         <summary class="cursor-pointer text-xs font-medium text-gray-500 hover:text-gray-700">Advanced Settings</summary>
                         <div class="mt-3 grid grid-cols-2 lg:grid-cols-5 gap-4">
+                            @if(!$auto)
                             <div>
                                 <label class="block text-xs text-gray-500 mb-1" title="Mengt het AI-resultaat met een klassieke upscale om AI-artefacten te dempen. Dit is geen ruisverwijdering - gebruik daarvoor de Denoise-stap.">AI-blend ({{ $denoise }}%)</label>
                                 <input type="range" wire:model.live="denoise" min="0" max="100" class="w-full accent-indigo-500">
@@ -181,6 +203,7 @@
                                 <label class="block text-xs text-gray-500 mb-1">Sharpen ({{ $sharpen }}%)</label>
                                 <input type="range" wire:model.live="sharpen" min="0" max="100" class="w-full accent-indigo-500">
                             </div>
+                            @endif
                             <div>
                                 <label class="block text-xs text-gray-500 mb-1">Brightness ({{ $brightness }}%)</label>
                                 <input type="range" wire:model.live="brightness" min="0" max="200" class="w-full accent-indigo-500">

@@ -28,13 +28,14 @@ class UpscaleImage implements ShouldQueue
         public string $targetSize = '70x100',
         public int $targetDpi = 300,
         public string $model = 'realesrgan-x4plus',
-        public int $denoise = 50,
-        public int $sharpen = 0,
+        public int $denoise = 0,
+        public int $sharpen = 20,
         public array $colorAdjust = [],
         public int $tileSize = 0,
         public ?int $backgroundTaskId = null,
-        public bool $preDenoise = true,
-        public string $preDenoiseStrength = 'normal',
+        public bool $preDenoise = false,
+        public string $preDenoiseStrength = 'light',
+        public bool $auto = false,
     ) {
         $this->queue = 'upscale';
     }
@@ -46,6 +47,7 @@ class UpscaleImage implements ShouldQueue
         DenoiseService $denoiseService,
         QualityControlService $qcService,
         ImageFinalizer $finalizer,
+        \App\Services\AutoTuneService $autoTune,
     ): void {
         set_time_limit(0);
 
@@ -54,6 +56,40 @@ class UpscaleImage implements ShouldQueue
             : null;
 
         $bgTask?->markRunning();
+
+        // ── Automatische modus: formaat-gating + configuratie-keuze per afbeelding ──
+        if ($this->auto) {
+            $this->progress($bgTask, 'autotune-gating', 2);
+            $gate = $autoTune->gate($this->poster->original_path, $this->targetSize);
+
+            if (! $gate['feasible']) {
+                throw new \RuntimeException(sprintf(
+                    '%s cm is niet haalbaar voor dit ontwerp: effectief %d DPI na AI-upscale (minimaal %d nodig). Grootste haalbare formaat: %s. Geen enkele instelling lost te weinig bronpixels op.',
+                    $this->targetSize,
+                    $gate['effective_dpi'],
+                    $gate['min_dpi'],
+                    $gate['max_sellable_size'] ? $gate['max_sellable_size'] . ' cm' : 'geen',
+                ));
+            }
+
+            $this->progress($bgTask, 'autotune', 4);
+            $choice = $autoTune->choose($this->poster->original_path, $this->targetSize, $this->targetDpi);
+
+            $chosen = $choice['config'];
+            $this->model = $chosen['model'];
+            $this->denoise = (int) $chosen['blend_bicubic'];
+            $this->sharpen = (int) $chosen['sharpen'];
+            $this->preDenoise = $chosen['pre_denoise'] !== 'off';
+            if ($this->preDenoise) {
+                $this->preDenoiseStrength = $chosen['pre_denoise'];
+            }
+
+            PosterActivity::log($this->poster->id, 'autotuned', [
+                'chosen' => $chosen,
+                'score' => $choice['score'],
+                'candidates' => $choice['candidates'],
+            ]);
+        }
 
         $outputFilename = $namingService->upscaledName($this->poster->slug);
         $outputPath = storage_path('app/upscaled/' . $outputFilename);
@@ -153,7 +189,7 @@ class UpscaleImage implements ShouldQueue
 
         // ── Final QC on the print file (profile now required) ──
         $this->progress($bgTask, 'qc-output', 88);
-        $outputReport = $qcService->runAndStore($outputPath, 'output', $this->poster->id, requireIcc: true);
+        $outputReport = $qcService->runAndStore($outputPath, 'output', $this->poster->id, requirePrintReady: true);
 
         $this->poster->update([
             'upscaled_path' => $outputPath,
@@ -166,6 +202,7 @@ class UpscaleImage implements ShouldQueue
             'model' => $this->model,
             'denoise' => $this->denoise,
             'pre_denoise' => $this->preDenoise ? $this->preDenoiseStrength : 'off',
+            'auto' => $this->auto,
             'qc_verdict' => $outputReport->verdict,
         ]);
 

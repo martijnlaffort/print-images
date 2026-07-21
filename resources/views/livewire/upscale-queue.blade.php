@@ -28,7 +28,21 @@
         </div>
     @endif
 
+    {{-- Automatische modus --}}
+    <div class="mb-4 rounded-lg border p-5 shadow-sm {{ $auto ? 'border-emerald-300 bg-emerald-50' : 'border-gray-200 bg-white' }}">
+        <label class="flex items-center gap-3">
+            <input type="checkbox" wire:model.live="auto" class="rounded border-gray-300 text-emerald-600 focus:ring-emerald-500">
+            <span class="text-sm font-semibold uppercase tracking-wide {{ $auto ? 'text-emerald-800' : 'text-gray-700' }}">Automatische instellingen per afbeelding</span>
+        </label>
+        <p class="mt-1.5 text-xs {{ $auto ? 'text-emerald-700' : 'text-gray-400' }}">
+            De app test per afbeelding meerdere modellen en instellingen op een detailrijke uitsnede en kiest de scherpste configuratie.
+            Formaten die te weinig bronpixels hebben worden geweigerd met een duidelijke melding.
+            @if($auto) Handmatige model-, blend- en sharpen-instellingen worden genegeerd. @endif
+        </p>
+    </div>
+
     {{-- Enhancement Presets --}}
+    @if(!$auto)
     <div class="mb-4">
         <h2 class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Enhancement Presets</h2>
         <div class="flex gap-2">
@@ -39,8 +53,10 @@
             <button wire:click="applyPreset('gentle')" class="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50">Gentle</button>
         </div>
     </div>
+    @endif
 
     {{-- Denoise (bron) --}}
+    @if(!$auto)
     <div class="mb-4 rounded-lg bg-white p-5 shadow-sm border border-gray-200">
         <div class="flex items-center gap-4">
             <label class="flex items-center gap-2">
@@ -62,6 +78,7 @@
             @endif
         </div>
     </div>
+    @endif
 
     {{-- Controls --}}
     <div class="mb-6 rounded-lg bg-white p-5 shadow-sm border border-gray-200">
@@ -83,6 +100,7 @@
                     <option value="350">350 DPI (High Quality)</option>
                 </select>
             </div>
+            @if(!$auto)
             <div>
                 <label class="block text-sm font-medium text-gray-700 mb-1">AI Model</label>
                 <select wire:model="model" class="w-full rounded-lg border-gray-300 text-sm focus:border-indigo-500 focus:ring-indigo-500">
@@ -100,6 +118,7 @@
                     <span>Smooth</span>
                 </div>
             </div>
+            @endif
             <div>
                 <label class="block text-sm font-medium text-gray-700 mb-1">GPU Tile Size</label>
                 <select wire:model="tileSize" class="w-full rounded-lg border-gray-300 text-sm focus:border-indigo-500 focus:ring-indigo-500">
@@ -121,6 +140,7 @@
                 @endif
             </summary>
             <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mt-3">
+                @if(!$auto)
                 <div>
                     <label class="block text-sm font-medium text-gray-700 mb-1">Sharpen: {{ $sharpen }}%</label>
                     <input type="range" wire:model.live="sharpen" min="0" max="100" step="10"
@@ -130,6 +150,7 @@
                         <span>Strong</span>
                     </div>
                 </div>
+                @endif
                 <div>
                     <label class="block text-sm font-medium text-gray-700 mb-1">Brightness: {{ $brightness }}%</label>
                     <input type="range" wire:model.live="brightness" min="50" max="150" step="5"

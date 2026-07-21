@@ -6,7 +6,6 @@ use App\Models\Poster;
 use App\Models\PosterActivity;
 use App\Services\DpiValidator;
 use App\Services\ImageFinalizer;
-use App\Services\MagickService;
 use App\Services\NamingService;
 use App\Services\QualityControlService;
 use Illuminate\Bus\Queueable;
@@ -14,7 +13,6 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
-use Illuminate\Support\Facades\Process;
 use RuntimeException;
 
 class GenerateSizeVariants implements ShouldQueue
@@ -35,7 +33,6 @@ class GenerateSizeVariants implements ShouldQueue
 
     public function handle(
         NamingService $namingService,
-        MagickService $magick,
         ImageFinalizer $finalizer,
         QualityControlService $qcService,
     ): void {
@@ -59,7 +56,22 @@ class GenerateSizeVariants implements ShouldQueue
             return;
         }
 
-        $sourcePath = $this->poster->upscaled_path ?? $this->poster->original_path;
+        // Exports komen uitsluitend van de behandelde upscale-master.
+        // Terugvallen op de onbewerkte bron zou ruis/JPEG-artefacten
+        // ongefilterd het printbestand in sturen.
+        $sourcePath = $this->poster->upscaled_path;
+        if (! $sourcePath || ! file_exists($sourcePath)) {
+            PosterActivity::log($this->poster->id, 'export_blocked', [
+                'reasons' => ['Geen upscale-master: draai eerst de upscale-stap; exporteren vanaf de onbewerkte bron is niet toegestaan.'],
+            ]);
+
+            if ($this->backgroundTaskId) {
+                \App\Models\BackgroundTask::find($this->backgroundTaskId)
+                    ?->markFailed("Export geblokkeerd (geen upscale-master): {$this->poster->title}");
+            }
+
+            return;
+        }
 
         $dpiValidator = new DpiValidator();
 
@@ -73,20 +85,15 @@ class GenerateSizeVariants implements ShouldQueue
             $filename = preg_replace('/\.\w+$/', '.png', $namingService->sizeVariantName($this->poster->slug, $sizeName));
             $outputPath = rtrim($this->outputDir, '/\\') . '/' . $filename;
 
-            $result = Process::timeout(120)->run([
-                $magick->path(),
-                $sourcePath,
-                '-filter', 'Lanczos',
-                '-resize', "{$pixels['width']}x{$pixels['height']}",
-                '-density', '300',
-                '-units', 'PixelsPerInch',
-                ...$finalizer->profileArgs(),
-                $outputPath,
-            ]);
+            $finalizer->exportPrintFile($sourcePath, $outputPath, $pixels['width'], $pixels['height'], 300);
 
-            if ($result->failed()) {
+            // Harde poort: volledige QC (incl. ruisdrempel) op elke
+            // eind-export — een te ruizig of niet-print-klaar bestand
+            // laat de taak expliciet falen.
+            $report = $qcService->runAndStore($outputPath, 'export', $this->poster->id, requirePrintReady: true);
+            if ($report->verdict === 'fail') {
                 throw new RuntimeException(
-                    "Failed to generate size variant {$sizeName}: " . $result->errorOutput()
+                    "Export {$sizeName} niet print-klaar: " . implode(' ', $report->reasons)
                 );
             }
         }

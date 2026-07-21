@@ -16,7 +16,7 @@ class UpscaleService
         string $outputPath,
         int $scale = 4,
         string $model = 'realesrgan-x4plus',
-        int $denoise = 50,
+        int $denoise = 0,
         int $tileSize = 0,
     ): string {
         $binary = $this->getBinaryPath();
@@ -103,8 +103,8 @@ class UpscaleService
         int $targetWidth,
         int $targetHeight,
         string $model = 'realesrgan-x4plus',
-        int $denoise = 50,
-        int $sharpen = 0,
+        int $denoise = 0,
+        int $sharpen = 20,
         array $colorAdjust = [],
         int $tileSize = 0,
         int $targetDpi = 300,
@@ -243,10 +243,15 @@ class UpscaleService
 
     private function resizeToExact(string $input, string $output, int $width, int $height, int $dpi = 300): void
     {
+        // Cover + center-crop: vult de doelbox zonder de aspectratio te
+        // vervormen (de oude "!"-resize rekte het beeld uit bij een
+        // afwijkende bron-verhouding).
         $result = Process::timeout(120)->run([
             $this->magick->path(), $input,
             '-filter', 'Lanczos',
-            '-resize', "{$width}x{$height}!",
+            '-resize', "{$width}x{$height}^",
+            '-gravity', 'center',
+            '-extent', "{$width}x{$height}",
             '-density', (string) $dpi,
             '-units', 'PixelsPerInch',
             $output,

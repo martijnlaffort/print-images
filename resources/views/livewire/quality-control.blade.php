@@ -51,6 +51,7 @@
                     <th class="px-4 py-2 text-left text-xs font-semibold text-gray-500 uppercase">Fase</th>
                     <th class="px-4 py-2 text-left text-xs font-semibold text-gray-500 uppercase">Ruis (sd)</th>
                     <th class="px-4 py-2 text-left text-xs font-semibold text-gray-500 uppercase">Korrel</th>
+                    <th class="px-4 py-2 text-left text-xs font-semibold text-gray-500 uppercase">Modus</th>
                     <th class="px-4 py-2 text-left text-xs font-semibold text-gray-500 uppercase">ICC</th>
                     <th class="px-4 py-2 text-left text-xs font-semibold text-gray-500 uppercase">Oordeel</th>
                     <th class="px-4 py-2 text-left text-xs font-semibold text-gray-500 uppercase">Datum</th>
@@ -68,6 +69,13 @@
                         </td>
                         <td class="px-4 py-2 text-gray-700">{{ number_format($r->metrics['noise']['flattest_mean_sd'] ?? 0, 2) }}</td>
                         <td class="px-4 py-2 text-gray-700">{{ number_format($r->metrics['grain']['flattest_mean_laplacian'] ?? 0, 2) }}</td>
+                        <td class="px-4 py-2">
+                            @if(isset($r->metrics['mode']))
+                                <span class="{{ $r->metrics['mode']['print_ready'] ? 'text-gray-700' : 'text-red-600 font-semibold' }}" title="{{ $r->metrics['mode']['colorspace'] }}{{ $r->metrics['mode']['has_alpha'] ? ' + alfakanaal' : '' }}">{{ $r->metrics['mode']['label'] }}</span>
+                            @else
+                                <span class="text-gray-400">?</span>
+                            @endif
+                        </td>
                         <td class="px-4 py-2">
                             @if($r->metrics['icc']['embedded'] ?? false)
                                 <span class="text-green-600" title="{{ $r->metrics['icc']['description'] }}">&#10003;</span>
@@ -214,7 +222,7 @@
                     </div>
 
                     {{-- Bestand & profiel --}}
-                    <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 text-sm">
+                    <div class="grid grid-cols-2 lg:grid-cols-5 gap-3 text-sm">
                         <div class="rounded-lg border border-gray-200 p-3">
                             <p class="text-xs text-gray-500">Afmetingen</p>
                             <p class="font-semibold text-gray-900">{{ $m['width'] ?? '?' }} &times; {{ $m['height'] ?? '?' }} px</p>
@@ -222,6 +230,16 @@
                         <div class="rounded-lg border border-gray-200 p-3">
                             <p class="text-xs text-gray-500">Formaat</p>
                             <p class="font-semibold {{ strtoupper($m['format'] ?? '') === 'JPEG' ? 'text-red-600' : 'text-gray-900' }}">{{ $m['format'] ?? '?' }}</p>
+                        </div>
+                        <div class="rounded-lg border border-gray-200 p-3">
+                            <p class="text-xs text-gray-500">Kleurmodus</p>
+                            @if(isset($m['mode']))
+                                <p class="font-semibold {{ $m['mode']['print_ready'] ? 'text-gray-900' : 'text-red-600' }}">
+                                    {{ $m['mode']['label'] }}{{ $m['mode']['has_alpha'] ? ' (alfakanaal!)' : '' }}
+                                </p>
+                            @else
+                                <p class="font-semibold text-gray-400">onbekend</p>
+                            @endif
                         </div>
                         <div class="rounded-lg border border-gray-200 p-3">
                             <p class="text-xs text-gray-500">DPI-metadata</p>

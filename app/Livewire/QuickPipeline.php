@@ -18,17 +18,18 @@ class QuickPipeline extends Component
     public bool $selectAll = true;
 
     // Denoise (runs before upscaling, on the source)
-    public bool $enableDenoise = true;
-    public string $denoiseStrength = 'normal';
+    public bool $enableDenoise = false;
+    public string $denoiseStrength = 'light';
 
     // Upscale
     public bool $enableUpscale = true;
+    public bool $auto = true;
     public string $upscalePreset = 'standard';
     public string $targetSize = '70x100';
     public int $targetDpi = 300;
     public string $model = 'realesrgan-x4plus';
-    public int $denoise = 50;
-    public int $sharpen = 0;
+    public int $denoise = 0;
+    public int $sharpen = 20;
     public int $brightness = 100;
     public int $contrast = 0;
     public int $saturation = 100;
@@ -56,11 +57,27 @@ class QuickPipeline extends Component
 
     public function mount(): void
     {
+        $this->auto = (bool) config('posterforge.autotune.enabled', true);
         $this->outputDir = Setting::get('export.default_dir', storage_path('app/exports'));
         $this->enableDenoise = (bool) config('posterforge.denoise.default_enabled', true);
         $this->denoiseStrength = config('posterforge.denoise.default_strength', 'normal');
         $this->targetSize = config('posterforge.upscale.default_target_size', '70x100');
         $this->exportSizes = [config('posterforge.upscale.default_target_size', '70x100')];
+
+        // Opgeslagen benchmark-preset als handmatige defaults.
+        $preset = Setting::get('upscale.preset');
+        if (is_array($preset)) {
+            $this->model = $preset['model'] ?? $this->model;
+            $this->denoise = (int) ($preset['blend_bicubic'] ?? $this->denoise);
+            $this->sharpen = (int) ($preset['sharpen'] ?? $this->sharpen);
+            $pre = $preset['pre_denoise'] ?? null;
+            if ($pre !== null) {
+                $this->enableDenoise = $pre !== 'off';
+                if ($pre !== 'off') {
+                    $this->denoiseStrength = $pre;
+                }
+            }
+        }
 
         // Select all posters by default
         $this->selectedPosters = Poster::pluck('id')
@@ -70,12 +87,14 @@ class QuickPipeline extends Component
 
     public function applyPreset(string $preset): void
     {
+        // Herijkt op benchmark 20260721: blend > 25 kost detail, dus alle
+        // presets werken vanuit blend 0-25 + (licht) nasharpen.
         match ($preset) {
-            'standard' => $this->setPreset(50, 0, 100, 100, 0),
-            'detailed' => $this->setPreset(70, 20, 100, 100, 0),
-            'sharp' => $this->setPreset(20, 40, 100, 100, 0),
-            'vivid' => $this->setPreset(50, 10, 110, 110, 0),
-            'gentle' => $this->setPreset(80, 0, 100, 100, 0),
+            'standard' => $this->setPreset(0, 20, 100, 100, 0),
+            'detailed' => $this->setPreset(0, 30, 100, 100, 0),
+            'sharp' => $this->setPreset(0, 40, 100, 100, 0),
+            'vivid' => $this->setPreset(0, 20, 110, 110, 0),
+            'gentle' => $this->setPreset(25, 0, 100, 100, 0),
             default => null,
         };
 
@@ -170,6 +189,7 @@ class QuickPipeline extends Component
             ],
             'upscale' => [
                 'enabled' => $this->enableUpscale,
+                'auto' => $this->auto,
                 'targetSize' => $this->targetSize,
                 'targetDpi' => $this->targetDpi,
                 'model' => $this->model,

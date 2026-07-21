@@ -113,9 +113,21 @@ class ProcessPipeline implements ShouldQueue
                     continue;
                 }
 
+                // Exports komen uitsluitend van de behandelde upscale-master;
+                // de onbewerkte bron mag nooit ongefilterd naar print.
+                if (! $poster->upscaled_path || ! file_exists($poster->upscaled_path)) {
+                    $blocked[] = $poster->title;
+                    PosterActivity::log($poster->id, 'export_blocked', [
+                        'reasons' => ['Geen upscale-master: draai eerst de upscale-stap; exporteren vanaf de onbewerkte bron is niet toegestaan.'],
+                    ]);
+                    $currentStep++;
+                    $this->reportProgress($task, $currentStep, $totalSteps, "GEBLOKKEERD (geen upscale-master): {$poster->title}");
+                    continue;
+                }
+
                 $this->reportProgress($task, $currentStep, $totalSteps, "Exporting: {$poster->title}");
 
-                $this->runExport($poster, $namingService, $magick, $finalizer);
+                $this->runExport($poster, $namingService, $finalizer, $qcService);
                 $poster->update(['status' => 'exported']);
 
                 $currentStep++;
@@ -215,6 +227,49 @@ class ProcessPipeline implements ShouldQueue
         $cfg = $this->config['upscale'];
         $denoiseCfg = $this->config['denoise'] ?? ['enabled' => false, 'strength' => 'normal'];
 
+        // ── Automatische modus: formaat-gating + configuratie-keuze per afbeelding ──
+        if ($cfg['auto'] ?? false) {
+            $autoTune = app(\App\Services\AutoTuneService::class);
+
+            $gate = $autoTune->gate($poster->original_path, $cfg['targetSize']);
+            if (! $gate['feasible']) {
+                // Eerlijk weigeren zonder de hele batch te laten stranden.
+                PosterActivity::log($poster->id, 'upscale_geweigerd', [
+                    'reden' => sprintf(
+                        '%s cm niet haalbaar: effectief %d DPI (minimaal %d). Grootste haalbare formaat: %s.',
+                        $cfg['targetSize'],
+                        $gate['effective_dpi'],
+                        $gate['min_dpi'],
+                        $gate['max_sellable_size'] ? $gate['max_sellable_size'] . ' cm' : 'geen',
+                    ),
+                ]);
+                Cache::forget("upscale_progress_{$poster->id}");
+                return;
+            }
+
+            Cache::put("upscale_progress_{$poster->id}", [
+                'stage' => 'autotune',
+                'percent' => 3,
+            ], now()->addMinutes(30));
+
+            $choice = $autoTune->choose($poster->original_path, $cfg['targetSize'], $cfg['targetDpi']);
+            $chosen = $choice['config'];
+
+            $cfg['model'] = $chosen['model'];
+            $cfg['denoise'] = (int) $chosen['blend_bicubic'];
+            $cfg['sharpen'] = (int) $chosen['sharpen'];
+            $denoiseCfg = [
+                'enabled' => $chosen['pre_denoise'] !== 'off',
+                'strength' => $chosen['pre_denoise'] !== 'off' ? $chosen['pre_denoise'] : $denoiseCfg['strength'],
+            ];
+
+            PosterActivity::log($poster->id, 'autotuned', [
+                'chosen' => $chosen,
+                'score' => $choice['score'],
+                'candidates' => $choice['candidates'],
+            ]);
+        }
+
         $outputFilename = $namingService->upscaledName($poster->slug);
         $outputPath = storage_path('app/upscaled/' . $outputFilename);
 
@@ -313,7 +368,7 @@ class ProcessPipeline implements ShouldQueue
 
         // ── Embed ICC profile + true DPI, then final QC ──
         $finalizer->finalize($outputPath, $cfg['targetDpi']);
-        $qcService->runAndStore($outputPath, 'output', $poster->id, requireIcc: true);
+        $qcService->runAndStore($outputPath, 'output', $poster->id, requirePrintReady: true);
 
         $poster->update([
             'upscaled_path' => $outputPath,
@@ -375,7 +430,7 @@ class ProcessPipeline implements ShouldQueue
         }
     }
 
-    private function runExport(Poster $poster, NamingService $namingService, MagickService $magick, ImageFinalizer $finalizer): void
+    private function runExport(Poster $poster, NamingService $namingService, ImageFinalizer $finalizer, QualityControlService $qcService): void
     {
         $cfg = $this->config['export'];
         $outputDir = $cfg['outputDir'];
@@ -384,7 +439,7 @@ class ProcessPipeline implements ShouldQueue
             mkdir($outputDir, 0755, true);
         }
 
-        $sourcePath = $poster->upscaled_path ?? $poster->original_path;
+        $sourcePath = $poster->upscaled_path;
         $dpiValidator = new DpiValidator();
 
         foreach ($cfg['sizes'] as $sizeName) {
@@ -397,20 +452,15 @@ class ProcessPipeline implements ShouldQueue
             $filename = preg_replace('/\.\w+$/', '.png', $namingService->sizeVariantName($poster->slug, $sizeName));
             $outputPath = rtrim($outputDir, '/\\') . '/' . $filename;
 
-            $result = Process::timeout(120)->run([
-                $magick->path(),
-                $sourcePath,
-                '-filter', 'Lanczos',
-                '-resize', "{$pixels['width']}x{$pixels['height']}",
-                '-density', '300',
-                '-units', 'PixelsPerInch',
-                ...$finalizer->profileArgs(),
-                $outputPath,
-            ]);
+            $finalizer->exportPrintFile($sourcePath, $outputPath, $pixels['width'], $pixels['height'], 300);
 
-            if ($result->failed()) {
+            // Harde poort: volledige QC (incl. ruisdrempel) op elke
+            // eind-export — een te ruizig of niet-print-klaar bestand
+            // laat de pipeline expliciet falen.
+            $report = $qcService->runAndStore($outputPath, 'export', $poster->id, requirePrintReady: true);
+            if ($report->verdict === 'fail') {
                 throw new \RuntimeException(
-                    "Failed to export {$sizeName} for {$poster->title}: " . $result->errorOutput()
+                    "Export {$sizeName} niet print-klaar: " . implode(' ', $report->reasons)
                 );
             }
         }

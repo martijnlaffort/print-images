@@ -1,4 +1,89 @@
 {
+  "hooks": {
+    "Notification": [
+      {
+        "hooks": [
+          {
+            "command": "curl.exe -s --max-time 8 -o NUL -X POST -H \"X-Plexus-Token: 9cafe60fcbc5b8a0ef4e52b60c62b539a937dc3214dcef056dbf82292231cbfb\" --data-binary @- http://127.0.0.1:56390/hook",
+            "type": "command"
+          }
+        ]
+      }
+    ],
+    "PermissionRequest": [
+      {
+        "hooks": [
+          {
+            "command": "curl.exe -s --max-time 4 -o NUL -X POST -H \"X-Plexus-Token: 9cafe60fcbc5b8a0ef4e52b60c62b539a937dc3214dcef056dbf82292231cbfb\" --data-binary @- http://127.0.0.1:56390/hook",
+            "type": "command"
+          }
+        ],
+        "matcher": "ExitPlanMode|AskUserQuestion"
+      }
+    ],
+    "PostToolUse": [
+      {
+        "hooks": [
+          {
+            "command": "curl.exe -s --max-time 4 -o NUL -X POST -H \"X-Plexus-Token: 9cafe60fcbc5b8a0ef4e52b60c62b539a937dc3214dcef056dbf82292231cbfb\" --data-binary @- http://127.0.0.1:56390/hook",
+            "type": "command"
+          }
+        ],
+        "matcher": "ExitPlanMode|AskUserQuestion"
+      }
+    ],
+    "PreToolUse": [
+      {
+        "hooks": [
+          {
+            "command": "curl.exe -s --max-time 4 -o NUL -X POST -H \"X-Plexus-Token: 9cafe60fcbc5b8a0ef4e52b60c62b539a937dc3214dcef056dbf82292231cbfb\" --data-binary @- http://127.0.0.1:56390/hook",
+            "type": "command"
+          }
+        ],
+        "matcher": "ExitPlanMode|AskUserQuestion"
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "command": "curl.exe -s --max-time 4 -o NUL -X POST -H \"X-Plexus-Token: 9cafe60fcbc5b8a0ef4e52b60c62b539a937dc3214dcef056dbf82292231cbfb\" --data-binary @- http://127.0.0.1:56390/hook",
+            "type": "command"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "command": "curl.exe -s --max-time 8 -o NUL -X POST -H \"X-Plexus-Token: 9cafe60fcbc5b8a0ef4e52b60c62b539a937dc3214dcef056dbf82292231cbfb\" --data-binary @- http://127.0.0.1:56390/hook",
+            "type": "command"
+          }
+        ]
+      }
+    ],
+    "StopFailure": [
+      {
+        "hooks": [
+          {
+            "command": "curl.exe -s --max-time 8 -o NUL -X POST -H \"X-Plexus-Token: 9cafe60fcbc5b8a0ef4e52b60c62b539a937dc3214dcef056dbf82292231cbfb\" --data-binary @- http://127.0.0.1:56390/hook",
+            "type": "command"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "command": "curl.exe -s --max-time 2 -o NUL -X POST -H \"X-Plexus-Token: 9cafe60fcbc5b8a0ef4e52b60c62b539a937dc3214dcef056dbf82292231cbfb\" --data-binary @- http://127.0.0.1:56390/hook",
+            "type": "command"
+          }
+        ]
+      }
+    ]
+  },
   "permissions": {
     "allow": [
       "Bash",

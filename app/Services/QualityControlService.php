@@ -44,6 +44,7 @@ class QualityControlService
             'width' => $info['width'],
             'height' => $info['height'],
             'format' => $info['format'],
+            'mode' => $info['mode'],
             'density' => $info['density'],
             'icc' => $info['icc'],
             'noise' => [
@@ -66,11 +67,12 @@ class QualityControlService
     }
 
     /**
-     * Verdict for a metrics array. $requireIcc: true for pipeline output
-     * (profile must be embedded), false for source files (missing profile
-     * is flagged as a warning — the pipeline will embed one).
+     * Verdict for a metrics array. $requirePrintReady: true for pipeline
+     * output/exports — dan zijn RGB zonder alfa, ingebed ICC-profiel en
+     * PNG harde eisen (FAIL). Voor bronbestanden (false) blijft een
+     * ontbrekend profiel een waarschuwing: de pipeline bedt er zelf een in.
      */
-    public function verdict(array $metrics, bool $requireIcc = false): array
+    public function verdict(array $metrics, bool $requirePrintReady = false): array
     {
         $fail = [];
         $warn = [];
@@ -96,7 +98,17 @@ class QualityControlService
 
         if (! $metrics['icc']['embedded']) {
             $msg = 'Geen ICC-profiel ingebed: printer gokt de kleurconversie (doffere/koelere kleuren).';
-            $requireIcc ? $fail[] = $msg : $warn[] = $msg;
+            $requirePrintReady ? $fail[] = $msg : $warn[] = $msg;
+        }
+
+        if ($requirePrintReady) {
+            $mode = $metrics['mode'] ?? null;
+            if ($mode && ! $mode['print_ready']) {
+                $fail[] = "Kleurmodus {$mode['label']} — printbestand moet RGB zonder alfakanaal zijn.";
+            }
+            if (strtoupper($metrics['format']) !== 'PNG') {
+                $fail[] = "Bestandsformaat {$metrics['format']} — printbestand moet PNG zijn.";
+            }
         }
 
         foreach ($metrics['warnings'] as $w) {
@@ -194,14 +206,14 @@ class QualityControlService
         string $path,
         string $phase,
         ?int $posterId = null,
-        bool $requireIcc = false,
+        bool $requirePrintReady = false,
         ?array $comparison = null,
         ?string $comparisonImagePath = null,
         ?string $batchId = null,
         ?array $metrics = null,
     ): QcReport {
         $metrics ??= $this->analyze($path);
-        $verdict = $this->verdict($metrics, $requireIcc);
+        $verdict = $this->verdict($metrics, $requirePrintReady);
 
         if ($comparison && $comparison['too_aggressive']) {
             $verdict['reasons'][] = sprintf(
@@ -249,17 +261,27 @@ class QualityControlService
     {
         $out = trim($this->magick->run([
             'identify', '-quiet', '-format',
-            '%w|%h|%m|%x|%y|%U|%[icc:description]',
+            '%w|%h|%m|%A|%[colorspace]|%x|%y|%U|%[icc:description]',
             $path . '[0]',
         ], 60));
 
         $parts = explode('|', $out);
-        if (count($parts) < 6) {
+        if (count($parts) < 8) {
             throw new RuntimeException("Cannot identify image: {$path}");
         }
 
-        [$w, $h, $format, $dx, $dy, $units] = $parts;
-        $iccDesc = $parts[6] ?? '';
+        [$w, $h, $format, $alpha, $colorspace, $dx, $dy, $units] = $parts;
+        $iccDesc = $parts[8] ?? '';
+
+        // Kleurmodus: printbestanden moeten RGB zonder alfakanaal zijn.
+        $hasAlpha = ! in_array(strtolower(trim($alpha)), ['undefined', 'false', 'off', ''], true);
+        $base = in_array(strtolower($colorspace), ['srgb', 'rgb'], true) ? 'RGB' : $colorspace;
+        $mode = [
+            'colorspace' => $colorspace,
+            'has_alpha' => $hasAlpha,
+            'label' => $base . ($hasAlpha ? 'A' : ''),
+            'print_ready' => $base === 'RGB' && ! $hasAlpha,
+        ];
 
         // Normalize density to DPI regardless of stored units.
         $toDpi = fn (float $v) => match ($units) {
@@ -272,6 +294,7 @@ class QualityControlService
             'width' => (int) $w,
             'height' => (int) $h,
             'format' => $format,
+            'mode' => $mode,
             'density' => [
                 'dpi_x' => round($toDpi((float) $dx)),
                 'dpi_y' => round($toDpi((float) $dy)),
