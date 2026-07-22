@@ -9,6 +9,8 @@ class UpscaleService
 {
     public function __construct(
         private MagickService $magick,
+        private DenoiseService $denoiser,
+        private QualityControlService $qc,
     ) {}
 
     public function upscale(
@@ -119,16 +121,47 @@ class UpscaleService
 
         $report = fn (int $percent) => $onProgress ? $onProgress($percent) : null;
 
-        // If image already meets target, just resize to exact dimensions
-        if ($requiredScale <= 1.0) {
-            $report(80);
-            $this->resizeToExact($inputPath, $outputPath, $targetWidth, $targetHeight, $targetDpi);
-            return $outputPath;
-        }
-
         $tempDir = sys_get_temp_dir();
         $currentInput = $inputPath;
         $tempFiles = [];
+
+        // Bron al groot genoeg: de AI-stap (met zijn impliciete
+        // ontruising) wordt overgeslagen. Zonder vangnet zou bronruis
+        // dan onbehandeld het printbestand in stromen — ontruis daarom
+        // eerst als de bron boven de QC-drempel meet, en pas dezelfde
+        // milde nabewerking toe als de AI-tak.
+        if ($requiredScale <= 1.0) {
+            try {
+                $report(20);
+                $currentInput = $this->denoiseIfNeeded($inputPath, $tempDir, $tempFiles);
+
+                $report(60);
+                $preSharpPath = ($sharpen > 0)
+                    ? $tempDir . '/upscale_presharp_' . uniqid() . '.png'
+                    : $outputPath;
+                if ($sharpen > 0) {
+                    $tempFiles[] = $preSharpPath;
+                }
+
+                $this->resizeToExact($currentInput, $preSharpPath, $targetWidth, $targetHeight, $targetDpi);
+
+                $report(80);
+
+                if ($sharpen > 0) {
+                    $this->applySharpen($preSharpPath, $outputPath, $sharpen);
+                }
+
+                if (! empty($colorAdjust)) {
+                    $this->applyColorAdjust($outputPath, $outputPath, $colorAdjust);
+                }
+
+                return $outputPath;
+            } finally {
+                foreach ($tempFiles as $tempFile) {
+                    @unlink($tempFile);
+                }
+            }
+        }
 
         try {
             // Single AI upscale pass (max 4x), then Lanczos resize to target.
@@ -239,6 +272,57 @@ class UpscaleService
     public function isAvailable(): bool
     {
         return file_exists($this->getBinaryPath());
+    }
+
+    /**
+     * Vangnet wanneer geen AI-pass draait: meet de bronruis en ontruis
+     * (wavelet) zodra die boven de QC-drempel ligt. 'auto' schaalt de
+     * sterkte mee met de overschrijding. Geeft het (eventueel ontruisde)
+     * pad terug; de bron zelf wordt nooit aangeraakt.
+     */
+    private function denoiseIfNeeded(string $inputPath, string $tempDir, array &$tempFiles): string
+    {
+        $cfg = config('posterforge.denoise.when_ai_skipped', []);
+        if (! ($cfg['enabled'] ?? true)) {
+            return $inputPath;
+        }
+
+        $threshold = (float) config('posterforge.qc.noise.acceptable', 3.0);
+        $noise = $this->qc->noiseSd($inputPath);
+        if ($noise <= $threshold) {
+            return $inputPath;
+        }
+
+        $configured = $cfg['strength'] ?? 'auto';
+        $order = ['light', 'normal', 'strong'];
+        $start = $configured === 'auto'
+            ? match (true) {
+                $noise > $threshold * 4 => 'strong',
+                $noise > $threshold * 2 => 'normal',
+                default => 'light',
+            }
+            : $configured;
+
+        $denoised = $tempDir . '/upscale_noai_denoise_' . uniqid() . '.png';
+        $tempFiles[] = $denoised;
+
+        // In 'auto' escaleren we zolang de hermeting boven de drempel
+        // blijft en er nog een zwaardere stand is — de export-QC is
+        // anders alsnog een harde FAIL zonder route naar een schone print.
+        $idx = max(0, (int) array_search($start, $order, true));
+        while (true) {
+            $this->denoiser->denoise($inputPath, $denoised, $order[$idx]);
+
+            if ($configured !== 'auto' || $idx >= count($order) - 1) {
+                break;
+            }
+            if ($this->qc->noiseSd($denoised) <= $threshold) {
+                break;
+            }
+            $idx++;
+        }
+
+        return $denoised;
     }
 
     private function resizeToExact(string $input, string $output, int $width, int $height, int $dpi = 300): void

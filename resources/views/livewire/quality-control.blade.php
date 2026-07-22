@@ -198,7 +198,7 @@
                                 <p class="font-semibold {{ ($m['noise']['status'] ?? '') === 'clean' ? 'text-green-600' : (($m['noise']['status'] ?? '') === 'acceptable' ? 'text-amber-600' : 'text-red-600') }}">
                                     sd {{ number_format($m['noise']['flattest_mean_sd'] ?? 0, 2) }}
                                 </p>
-                                <p class="text-[11px] text-gray-400">vlakke zones breed: ~{{ number_format($m['noise']['flat10_approx_sd'] ?? 0, 1) }}</p>
+                                <p class="text-[11px] text-gray-400">textuur-indicatie breed: ~{{ number_format($m['noise']['flat10_approx_sd'] ?? 0, 1) }} (telt echte textuur mee; geen drempelwaarde)</p>
                             </div>
                             <div class="rounded-lg border border-gray-200 p-3">
                                 <p class="text-xs text-gray-500">Fijne korrel (Laplacian)</p>

@@ -67,6 +67,23 @@ class QualityControlService
     }
 
     /**
+     * Alleen de drempel-ruismeting (gemiddelde sd van de vlakste blokken),
+     * zonder het volledige QC-pakket — voor snelle beslissingen in de
+     * pijplijn zoals het denoise-vangnet bij een overgeslagen AI-stap.
+     */
+    public function noiseSd(string $path): float
+    {
+        if (! file_exists($path)) {
+            throw new RuntimeException("File not found: {$path}");
+        }
+
+        $info = $this->identify($path);
+        $blocks = $this->flattestBlocks($path, $info['width'], $info['height']);
+
+        return (float) $this->blockNoise($path, $blocks['flattest'])['mean'];
+    }
+
+    /**
      * Verdict for a metrics array. $requirePrintReady: true for pipeline
      * output/exports — dan zijn RGB zonder alfa, ingebed ICC-profiel en
      * PNG harde eisen (FAIL). Voor bronbestanden (false) blijft een

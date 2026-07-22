@@ -34,6 +34,18 @@ return [
         // Handmatig inschakelen kan nog steeds; dan is 'light' de default.
         'default_enabled' => false,
         'default_strength' => 'light',
+
+        // Vangnet voor bronnen die al groot genoeg zijn: dan wordt de
+        // AI-stap (met zijn impliciete ontruising) overgeslagen en zou de
+        // bronruis onbehandeld doorstromen. Ligt de gemeten ruis boven de
+        // QC-drempel (qc.noise.acceptable), dan wordt de bron alsnog
+        // wavelet-ontruisd vóór de resize. 'auto' schaalt de sterkte mee
+        // met de overschrijding (licht / normaal / sterk); een vaste
+        // waarde ('light'|'normal'|'strong') kan ook.
+        'when_ai_skipped' => [
+            'enabled' => true,
+            'strength' => 'auto',
+        ],
         // Wavelet-denoise threshold (percent of quantum range) per strength.
         'strengths' => [
             'light' => 1.0,
