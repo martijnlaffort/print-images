@@ -173,14 +173,27 @@ return [
         'block_size' => 64,
         'flattest_count' => 50,
         // Mean standard deviation (0-255 scale) of the flattest blocks.
+        // Ruis-sd (gemiddelde van de vlakste blokken). De banden gelden
+        // alleen als de meting betrouwbaar is: het állervlakste blok moet
+        // onder 'reliable_max' zitten. Zit het daarboven, dan heeft het
+        // beeld geen egale vlakken en meet de methode échte textuur —
+        // status wordt dan 'unreliable' (geen hard oordeel).
         'noise' => [
-            'clean' => 1.0,
-            'acceptable' => 3.0,
+            'pass' => 3.0,
+            'warn' => 4.5,
+            'reliable_max' => 5.0,
         ],
         // Fine grain: mean Laplacian std-dev (0-255) inside the flattest blocks.
         'grain' => [
             'clean' => 1.0,
             'acceptable' => 3.0,
+        ],
+        // Kleur-check is informatief (warmte is beeldafhankelijk, nooit een
+        // fail). Alleen zeer hoge gemiddelde verzadiging (HSB, 0-100%)
+        // geeft een WARN: die oogt op print snel minder levendig dan op
+        // scherm.
+        'color' => [
+            'saturation_warn' => 60,
         ],
         // Warn when full-image Laplacian sharpness drops more than this after denoise.
         'detail_loss_warn_percent' => 30,

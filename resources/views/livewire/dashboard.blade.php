@@ -347,8 +347,8 @@
                                     <p class="font-medium text-gray-900">{{ str_replace('_', ' ', ucfirst($activity->action)) }}</p>
                                     @if($activity->details)
                                         <p class="text-xs text-gray-500 mt-0.5 truncate">
-                                            @foreach($activity->details as $key => $value)
-                                                {{ $key }}: {{ is_array($value) ? implode(', ', $value) : $value }}{{ !$loop->last ? ' | ' : '' }}
+                                            @foreach($activity->formattedDetails() as $key => $value)
+                                                {{ $key }}: {{ $value }}{{ !$loop->last ? ' | ' : '' }}
                                             @endforeach
                                         </p>
                                     @endif
@@ -587,8 +587,8 @@
                                         </div>
                                         @if($activity->details)
                                             <p class="text-xs text-gray-500 mt-0.5">
-                                                @foreach($activity->details as $key => $value)
-                                                    {{ $key }}: {{ is_array($value) ? implode(', ', $value) : $value }}{{ !$loop->last ? ' | ' : '' }}
+                                                @foreach($activity->formattedDetails() as $key => $value)
+                                                    {{ $key }}: {{ $value }}{{ !$loop->last ? ' | ' : '' }}
                                                 @endforeach
                                             </p>
                                         @endif

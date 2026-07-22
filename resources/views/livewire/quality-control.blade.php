@@ -67,7 +67,15 @@
                         <td class="px-4 py-2 text-gray-500">
                             {{ ['source' => 'bron', 'denoised' => 'na denoise', 'output' => 'output'][$r->phase] ?? $r->phase }}
                         </td>
-                        <td class="px-4 py-2 text-gray-700">{{ number_format($r->metrics['noise']['flattest_mean_sd'] ?? 0, 2) }}</td>
+                        <td class="px-4 py-2">
+                            @php($ns = $r->metrics['noise']['status'] ?? null)
+                            <span class="{{ in_array($ns, ['fail', 'noisy']) ? 'text-red-600 font-semibold' : (in_array($ns, ['warn', 'acceptable']) ? 'text-amber-600' : 'text-gray-700') }}">
+                                {{ number_format($r->metrics['noise']['flattest_mean_sd'] ?? 0, 2) }}
+                            </span>
+                            @if($ns === 'unreliable')
+                                <span class="block text-[10px] text-gray-400" title="Detailrijk beeld zonder egale vlakken — beoordeel via een fysieke sample">niet meetbaar</span>
+                            @endif
+                        </td>
                         <td class="px-4 py-2 text-gray-700">{{ number_format($r->metrics['grain']['flattest_mean_laplacian'] ?? 0, 2) }}</td>
                         <td class="px-4 py-2">
                             @if(isset($r->metrics['mode']))
@@ -195,9 +203,19 @@
                         <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 text-sm">
                             <div class="rounded-lg border border-gray-200 p-3">
                                 <p class="text-xs text-gray-500">Ruis vlakste {{ $m['noise']['blocks_used'] ?? 50 }} blokken</p>
-                                <p class="font-semibold {{ ($m['noise']['status'] ?? '') === 'clean' ? 'text-green-600' : (($m['noise']['status'] ?? '') === 'acceptable' ? 'text-amber-600' : 'text-red-600') }}">
+                                @php($ns = $m['noise']['status'] ?? '')
+                                <p class="font-semibold {{ in_array($ns, ['fail', 'noisy']) ? 'text-red-600' : (in_array($ns, ['warn', 'acceptable']) ? 'text-amber-600' : ($ns === 'unreliable' ? 'text-gray-500' : 'text-green-600')) }}">
                                     sd {{ number_format($m['noise']['flattest_mean_sd'] ?? 0, 2) }}
+                                    @if($ns === 'unreliable')
+                                        <span class="text-xs font-normal">(niet meetbaar)</span>
+                                    @endif
                                 </p>
+                                @if(isset($m['noise']['flattest_block_sd']))
+                                    <p class="text-[11px] {{ $ns === 'unreliable' ? 'text-amber-600' : 'text-gray-400' }}">
+                                        vlakste blok sd {{ number_format($m['noise']['flattest_block_sd'], 2) }} —
+                                        {{ $ns === 'unreliable' ? 'geen egale vlakken: beoordeel via fysieke sample' : 'meting betrouwbaar' }}
+                                    </p>
+                                @endif
                                 <p class="text-[11px] text-gray-400">textuur-indicatie breed: ~{{ number_format($m['noise']['flat10_approx_sd'] ?? 0, 1) }} (telt echte textuur mee; geen drempelwaarde)</p>
                             </div>
                             <div class="rounded-lg border border-gray-200 p-3">
@@ -217,6 +235,11 @@
                                     <span class="text-xs text-gray-500">({{ $m['color']['indication'] ?? '' }})</span>
                                 </p>
                                 <p class="text-[11px] text-gray-400">R {{ $m['color']['r'] ?? 0 }} &middot; G {{ $m['color']['g'] ?? 0 }} &middot; B {{ $m['color']['b'] ?? 0 }}</p>
+                                @if(isset($m['color']['saturation']))
+                                    <p class="text-[11px] {{ $m['color']['saturation'] > config('posterforge.qc.color.saturation_warn', 60) ? 'text-amber-600' : 'text-gray-400' }}">
+                                        verzadiging gem. {{ $m['color']['saturation'] }}%{{ $m['color']['saturation'] > config('posterforge.qc.color.saturation_warn', 60) ? ' — kan op print minder levendig ogen' : '' }}
+                                    </p>
+                                @endif
                             </div>
                         </div>
                     </div>

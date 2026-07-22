@@ -38,6 +38,8 @@ class GenerateMockup implements ShouldQueue
 
     public function handle(MockupService $mockupService, NamingService $namingService): void
     {
+        set_time_limit(0);
+
         // Normalize to single poster for backward compat
         $primaryPoster = is_array($this->poster) ? $this->poster[0] : $this->poster;
         $posters = is_array($this->poster) ? $this->poster : [$this->poster];

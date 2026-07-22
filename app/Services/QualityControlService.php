@@ -49,10 +49,12 @@ class QualityControlService
             'icc' => $info['icc'],
             'noise' => [
                 'flattest_mean_sd' => $noise['mean'],
+                'flattest_block_sd' => $noise['flattest_sd'],
+                'reliable' => $noise['flattest_sd'] < (float) $cfg['noise']['reliable_max'],
                 'block_size' => $cfg['block_size'],
                 'blocks_used' => count($blocks['flattest']),
                 'flat10_approx_sd' => $blocks['flat10_approx_sd'],
-                'status' => $this->level($noise['mean'], $cfg['noise']),
+                'status' => $this->noiseStatus($noise['mean'], $noise['flattest_sd'], $cfg['noise']),
             ],
             'grain' => [
                 'flattest_mean_laplacian' => $grain['mean'],
@@ -95,10 +97,16 @@ class QualityControlService
         $warn = [];
         $cfg = config('posterforge.qc');
 
-        if ($metrics['noise']['status'] === 'noisy') {
-            $fail[] = sprintf('Ruis in vlakste gebieden te hoog: sd %.2f (> %.1f)', $metrics['noise']['flattest_mean_sd'], $cfg['noise']['acceptable']);
-        } elseif ($metrics['noise']['status'] === 'acceptable') {
-            $warn[] = sprintf('Lichte ruis in vlakste gebieden: sd %.2f', $metrics['noise']['flattest_mean_sd']);
+        // Ruis: hard oordeel alleen als de meting betrouwbaar is (het
+        // beeld heeft egale vlakken); anders expliciet "niet meetbaar"
+        // als aandachtspunt — nooit een vals FAIL op textuur.
+        $noiseStatus = $metrics['noise']['status'];
+        if ($noiseStatus === 'fail' || $noiseStatus === 'noisy') {
+            $fail[] = sprintf('Ruis in egale vlakken te hoog: sd %.2f (> %.1f)', $metrics['noise']['flattest_mean_sd'], $cfg['noise']['warn'] ?? 4.5);
+        } elseif ($noiseStatus === 'warn' || $noiseStatus === 'acceptable') {
+            $warn[] = sprintf('Verhoogde ruis in egale vlakken: sd %.2f (band %.1f-%.1f) — kritisch beoordelen.', $metrics['noise']['flattest_mean_sd'], $cfg['noise']['pass'] ?? 3.0, $cfg['noise']['warn'] ?? 4.5);
+        } elseif ($noiseStatus === 'unreliable') {
+            $warn[] = sprintf('Ruis niet betrouwbaar te meten (detailrijk beeld: vlakste blok sd %.1f) — beoordeel via een fysieke sample.', $metrics['noise']['flattest_block_sd'] ?? 0);
         }
 
         // Grain (Laplacian) can't distinguish noise from fine patterns/line art,
@@ -111,6 +119,13 @@ class QualityControlService
             );
         } elseif ($metrics['grain']['status'] === 'acceptable') {
             $warn[] = sprintf('Lichte fijne korrel: %.2f', $metrics['grain']['flattest_mean_laplacian']);
+        }
+
+        // Kleur: informatief — warmte (R−B) is beeldafhankelijk en nooit
+        // een oordeel; alleen zeer hoge verzadiging is een print-risico.
+        $saturation = $metrics['color']['saturation'] ?? null;
+        if ($saturation !== null && $saturation > (float) ($cfg['color']['saturation_warn'] ?? 60)) {
+            $warn[] = sprintf('Sterk verzadigde kleuren (gemiddeld %.0f%%) kunnen op print minder levendig uitpakken dan op scherm — controleer via een sample.', $saturation);
         }
 
         if (! $metrics['icc']['embedded']) {
@@ -384,7 +399,12 @@ class QualityControlService
     {
         $values = $this->perBlockProperty($path, $blocks, []);
 
-        return ['mean' => round(array_sum($values) / count($values), 2)];
+        return [
+            'mean' => round(array_sum($values) / count($values), 2),
+            // Sd van het állervlakste blok = betrouwbaarheids-indicator:
+            // hoog betekent "geen egale vlakken, meting meet textuur".
+            'flattest_sd' => round(min($values), 2),
+        ];
     }
 
     private function blockGrain(string $path, array $blocks): array
@@ -460,12 +480,19 @@ class QualityControlService
         $b = round((int) $m[3] / 65535 * 255, 1);
         $rMinusB = round($r - $b, 1);
 
+        // Gemiddelde verzadiging over het hele beeld (HSB, 0-100%) — niet
+        // de verzadiging van de gemiddelde kleur, dat is iets anders.
+        $saturation = round((float) trim($this->magick->run([
+            $path . '[0]', '-colorspace', 'HSB', '-format', '%[fx:mean.g*100]', 'info:',
+        ], 120)), 1);
+
         return [
             'r' => $r,
             'g' => $g,
             'b' => $b,
             'r_minus_b' => $rMinusB,
             'indication' => $rMinusB > 5 ? 'warm' : ($rMinusB < -5 ? 'koel' : 'neutraal'),
+            'saturation' => $saturation,
         ];
     }
 
@@ -489,6 +516,23 @@ class QualityControlService
         }
 
         return $table;
+    }
+
+    /**
+     * Ruis-status met betrouwbaarheids-gate: zonder egale vlakken
+     * (vlakste blok >= reliable_max) meet de methode textuur i.p.v.
+     * korrel en is een hard oordeel niet te geven ('unreliable').
+     */
+    private function noiseStatus(float $mean, float $flattestSd, array $cfg): string
+    {
+        if ($flattestSd >= (float) $cfg['reliable_max']) {
+            return 'unreliable';
+        }
+        if ($mean < (float) $cfg['pass']) {
+            return 'pass';
+        }
+
+        return $mean <= (float) $cfg['warn'] ? 'warn' : 'fail';
     }
 
     private function level(float $value, array $thresholds): string

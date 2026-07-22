@@ -36,6 +36,8 @@ class GenerateSizeVariants implements ShouldQueue
         ImageFinalizer $finalizer,
         QualityControlService $qcService,
     ): void {
+        set_time_limit(0);
+
         if (! is_dir($this->outputDir)) {
             mkdir($this->outputDir, 0755, true);
         }

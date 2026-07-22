@@ -21,6 +21,11 @@ class UpscaleService
         int $denoise = 0,
         int $tileSize = 0,
     ): string {
+        // De AI-pass kan ver voorbij PHP's max_execution_time lopen; iets
+        // in de worker-keten wapent die timer opnieuw ná de jobstart, dus
+        // hier nogmaals uitschakelen vlak vóór het lange proces.
+        set_time_limit(0);
+
         $binary = $this->getBinaryPath();
         $magick = $this->magick->path();
         $tempDir = sys_get_temp_dir();
@@ -112,6 +117,8 @@ class UpscaleService
         int $targetDpi = 300,
         ?\Closure $onProgress = null,
     ): string {
+        set_time_limit(0);
+
         [$origWidth, $origHeight] = $this->getImageDimensions($inputPath);
 
         // Calculate required scale factor (use the larger dimension ratio)
@@ -287,7 +294,7 @@ class UpscaleService
             return $inputPath;
         }
 
-        $threshold = (float) config('posterforge.qc.noise.acceptable', 3.0);
+        $threshold = (float) config('posterforge.qc.noise.pass', 3.0);
         $noise = $this->qc->noiseSd($inputPath);
         if ($noise <= $threshold) {
             return $inputPath;
