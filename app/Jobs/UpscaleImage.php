@@ -229,6 +229,12 @@ class UpscaleImage implements ShouldQueue
         // Clear the progress cache so the poster card doesn't hang on a stale percentage.
         Cache::forget("upscale_progress_{$this->poster->id}");
 
+        // De reden (bv. een formaat-weigering door de gating) hoort ook in
+        // de postergeschiedenis thuis, niet alleen in een vluchtige toast.
+        PosterActivity::log($this->poster->id, 'upscale_blocked', [
+            'reason' => $e->getMessage(),
+        ]);
+
         if ($this->backgroundTaskId) {
             \App\Models\BackgroundTask::find($this->backgroundTaskId)
                 ?->markFailed($e->getMessage());

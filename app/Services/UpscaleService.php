@@ -92,7 +92,7 @@ class UpscaleService
                 try {
                     // Create bicubic upscale of original at the same scale
                     $percent = $scale * 100;
-                    $bicubicResult = Process::timeout(60)->run([
+                    $bicubicResult = Process::timeout((int) config('posterforge.upscale.magick_timeout', 600))->run([
                         $magick, $inputPath,
                         '-resize', "{$percent}%",
                         $bicubicOutput,
@@ -106,7 +106,7 @@ class UpscaleService
 
                     // Blend: (100 - denoise)% AI + denoise% bicubic
                     $aiWeight = 100 - $denoise;
-                    $blendResult = Process::timeout(60)->run([
+                    $blendResult = Process::timeout((int) config('posterforge.upscale.magick_timeout', 600))->run([
                         $magick, 'composite',
                         '-dissolve', "{$aiWeight}",
                         $aiOutput, $bicubicOutput,
@@ -399,7 +399,7 @@ class UpscaleService
         // Cover + center-crop: vult de doelbox zonder de aspectratio te
         // vervormen (de oude "!"-resize rekte het beeld uit bij een
         // afwijkende bron-verhouding).
-        $result = Process::timeout(120)->run([
+        $result = Process::timeout((int) config('posterforge.upscale.magick_timeout', 600))->run([
             $this->magick->path(), $input,
             '-filter', 'Lanczos',
             '-resize', "{$width}x{$height}^",
@@ -455,7 +455,7 @@ class UpscaleService
         $gain = round(0.5 + ($strength / 100) * 1.0, 2);  // 0.5 - 1.5
         $threshold = '0.02';
 
-        $result = Process::timeout(120)->run([
+        $result = Process::timeout((int) config('posterforge.upscale.magick_timeout', 600))->run([
             $magick, $input,
             '-unsharp', "0x{$sigma}+{$gain}+{$threshold}",
             $output,

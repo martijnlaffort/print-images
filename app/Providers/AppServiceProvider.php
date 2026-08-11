@@ -12,7 +12,13 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        //
+        // Vervang de NativePHP-queueworker door onze variant die het
+        // queue:listen-masterproces max_execution_time=0 geeft — anders
+        // sterft het na 300s terwijl het op een lange AI-job wacht.
+        $this->app->bind(
+            \Native\Laravel\Contracts\QueueWorker::class,
+            \App\Native\PatientQueueWorker::class,
+        );
     }
 
     /**

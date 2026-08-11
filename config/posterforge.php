@@ -21,6 +21,13 @@ return [
         // model plausibel-maar-verkeerd hallucineert.
         'default_denoise' => 0,
 
+        // Proces-timeouts (seconden). Een AI-pass op een grote bron loopt
+        // op de GTX 1650 ruim voorbij 5 minuten; de oude harde 300s brak
+        // legitieme runs af. magick_timeout dekt de ImageMagick-stappen
+        // (bicubic-blend, resize, sharpen) op tot 50MP+ bestanden.
+        'ai_timeout' => 1800,
+        'magick_timeout' => 600,
+
         // Vaste tegelgrootte voor realesrgan-ncnn-vulkan (-t). 0 = auto,
         // maar auto kiest de tegel op basis van het vrije VRAM op het
         // startmoment — en de Electron-UI deelt dezelfde 4GB GPU, dus dat

@@ -20,7 +20,9 @@ class GenerateSizeVariants implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
-    public int $timeout = 600;
+    // Meerdere grote formaten + volledige QC + printqc per export kan
+    // ruim boven 10 minuten uitkomen.
+    public int $timeout = 1800;
 
     public function __construct(
         public Poster $poster,
