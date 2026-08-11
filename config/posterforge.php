@@ -13,8 +13,12 @@ return [
         'default_target_size' => '70x100',
         'default_scale' => 4,
         'default_model' => 'realesrgan-x4plus',
-        // Bicubic-blend ("AI-blend"): 0 volgens benchmark 20260721 — elke
-        // blend > 25 kostte aantoonbaar detail zonder ruisvoordeel.
+        // Bicubic-blend ("AI-blend") = de generatieve-sterkte-demper: het
+        // percentage bicubic (interpolatie) dat over de AI-output wordt
+        // gemengd. Hoger = minder verzonnen textuur (en zachter). 0 volgens
+        // benchmark 20260721 voor illustraties; verhoog dit voor materiaal
+        // met fijne regelmatige textuur (haar/vlechtwerk/stof) waar het
+        // model plausibel-maar-verkeerd hallucineert.
         'default_denoise' => 0,
 
         // Vaste tegelgrootte voor realesrgan-ncnn-vulkan (-t). 0 = auto,
@@ -26,6 +30,25 @@ return [
         // NB: de tegel-overlap is NIET instelbaar in dit binair (zit
         // hard gecompileerd); alleen de tegelgrootte is te sturen.
         'tile_size' => 256,
+
+        // Bovengrens op de lineaire upscale-factor (doel-px / bron-px).
+        // Real-ESRGAN is GENERATIEF: boven deze factor verzint het model
+        // de meerderheid van de pixels (plausibel-maar-verkeerde textuur
+        // op haar/vlechtwerk/geweven stof). ~2x ≈ bron-DPI 150 voor het
+        // formaat (75% van de vlakte-pixels verzonnen). Formaten die méér
+        // vragen worden NIET aangeboden en de upscale ervan wordt
+        // geweigerd. Verhoog dit bewust als je voor illustraties méér
+        // hallucinatie accepteert; verder opschalen geeft geen detail
+        // maar uitsmering/verzinsel — de echte fix is de bron op hogere
+        // native resolutie genereren.
+        'max_generative_factor' => 2.0,
+
+        // Plafond op de generatieve AI-pass (2 of 4). 4 = huidig gedrag.
+        // Op 2: "twee-traps" — een bescheiden generatieve 2x-stap en
+        // Lanczos voor de rest. Minder verzonnen textuur, iets zachter.
+        // Relevant zodra je max_generative_factor boven 2 zet en tóch de
+        // hallucinatie wilt beperken.
+        'max_ai_pass_scale' => 4,
         'models' => [
             'realesrgan-x4plus-anime' => 'Real-ESRGAN x4+ (Illustration/Poster)',
             'realesrgan-x4plus' => 'Real-ESRGAN x4+ (Photo-realistic)',

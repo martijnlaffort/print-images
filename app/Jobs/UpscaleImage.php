@@ -64,10 +64,12 @@ class UpscaleImage implements ShouldQueue
 
             if (! $gate['feasible']) {
                 throw new \RuntimeException(sprintf(
-                    '%s cm is niet haalbaar voor dit ontwerp: effectief %d DPI na AI-upscale (minimaal %d nodig). Grootste haalbare formaat: %s. Geen enkele instelling lost te weinig bronpixels op.',
+                    '%s cm is niet haalbaar voor dit ontwerp: effectief %d DPI na AI-upscale (min. %d) en upscale-factor %.1fx vanaf de bron (max. %.1fx — daarboven verzint het generatieve model de meerderheid van de pixels). Grootste haalbare formaat: %s. Geen enkele instelling lost te weinig bronpixels op.',
                     $this->targetSize,
                     $gate['effective_dpi'],
                     $gate['min_dpi'],
+                    $gate['generative_factor'] ?? 0,
+                    $gate['max_generative_factor'] ?? 2.0,
                     $gate['max_sellable_size'] ? $gate['max_sellable_size'] . ' cm' : 'geen',
                 ));
             }

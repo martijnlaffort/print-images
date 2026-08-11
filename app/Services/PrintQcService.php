@@ -94,6 +94,11 @@ class PrintQcService
      */
     public function guardExport(Poster $poster, string $outputPath, string $sizeName): ExportFile
     {
+        // Herkomst vastleggen naast het bestand: bron-px, doel-px, model,
+        // instellingen en de lineaire factor — de bestandsnaam is
+        // aantoonbaar geen betrouwbaar spoor. Best-effort.
+        $this->writeProvenance($poster, $outputPath, $sizeName);
+
         try {
             $qc = $this->inspect($outputPath, $sizeName);
         } catch (\Throwable $e) {
@@ -212,6 +217,47 @@ class PrintQcService
         ]);
 
         return $file;
+    }
+
+    /**
+     * Herkomst-sidecar (<export>.herkomst.json): waar dit printbestand
+     * vandaan komt en hoeveel de generatieve upscaler moest verzinnen.
+     * Best-effort — mag de export nooit laten falen.
+     */
+    private function writeProvenance(Poster $poster, string $outputPath, string $sizeName): void
+    {
+        try {
+            $src = @getimagesize($poster->original_path);
+            $out = @getimagesize($outputPath);
+            if (! $src || ! $out) {
+                return;
+            }
+
+            $factor = round(max($out[0] / max(1, $src[0]), $out[1] / max(1, $src[1])), 2);
+            $verzonnen = round((1 - ($src[0] * $src[1]) / max(1, $out[0] * $out[1])) * 100, 1);
+
+            $run = PosterActivity::where('poster_id', $poster->id)
+                ->where('action', 'upscale_run')
+                ->latest('id')
+                ->first();
+            $instellingen = $run->details['instellingen'] ?? null;
+
+            $data = [
+                'bron' => ['pad' => $poster->original_path, 'px' => [$src[0], $src[1]]],
+                'doel' => ['formaat' => $sizeName, 'px' => [$out[0], $out[1]]],
+                'lineaire_factor' => $factor,
+                'verzonnen_pixels_pct' => $verzonnen,
+                'generatief_model' => $instellingen['model'] ?? null,
+                'instellingen' => $instellingen,
+                'gemaakt_op' => now()->toDateTimeString(),
+                'opmerking' => 'Real-ESRGAN is generatief: bij een hoge factor is de textuur grotendeels gesynthetiseerd, niet uit de bron afkomstig.',
+            ];
+
+            $path = preg_replace('/\.png$/i', '', $outputPath) . '.herkomst.json';
+            file_put_contents($path, json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
+        } catch (\Throwable $e) {
+            \Log::warning('Kon herkomst-sidecar niet schrijven', ['bestand' => $outputPath, 'fout' => $e->getMessage()]);
+        }
     }
 
     /**

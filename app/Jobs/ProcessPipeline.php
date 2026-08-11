@@ -249,10 +249,12 @@ class ProcessPipeline implements ShouldQueue
                 // Eerlijk weigeren zonder de hele batch te laten stranden.
                 PosterActivity::log($poster->id, 'upscale_geweigerd', [
                     'reden' => sprintf(
-                        '%s cm niet haalbaar: effectief %d DPI (minimaal %d). Grootste haalbare formaat: %s.',
+                        '%s cm niet haalbaar: effectief %d DPI (min. %d) en upscale-factor %.1fx vanaf de bron (max. %.1fx — daarboven verzint het model de meerderheid van de pixels). Grootste haalbare formaat: %s.',
                         $cfg['targetSize'],
                         $gate['effective_dpi'],
                         $gate['min_dpi'],
+                        $gate['generative_factor'] ?? 0,
+                        $gate['max_generative_factor'] ?? 2.0,
                         $gate['max_sellable_size'] ? $gate['max_sellable_size'] . ' cm' : 'geen',
                     ),
                 ]);

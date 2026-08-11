@@ -215,6 +215,11 @@ class UpscaleService
             // Multi-pass is too slow: the second AI pass operates on a massive image.
             $passScale = $requiredScale <= 2.0 ? 2 : 4;
 
+            // Plafond op de generatieve stap. Op 2 wordt dit een
+            // twee-traps upscale: een bescheiden AI 2x-pass en Lanczos
+            // voor de rest — minder verzonnen textuur (iets zachter).
+            $passScale = max(2, min($passScale, (int) config('posterforge.upscale.max_ai_pass_scale', 4)));
+
             $passOutput = $tempDir . '/upscale_pass_' . uniqid() . '.png';
             $tempFiles[] = $passOutput;
 

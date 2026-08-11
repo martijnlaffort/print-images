@@ -51,17 +51,34 @@ class DpiValidator
     }
 
     /**
-     * Haalbaarheid per printformaat voor een bron, met dezelfde rekenregel
-     * als de autotune-gate: effectieve DPI na één 4x AI-pass. Verder
-     * opschalen dan 4x voegt geen detail toe (geeft uitsmering, geen
-     * korrel), dus dit is de eerlijke bovengrens. >= qc.dpi.ideal (300) =
-     * ideaal, >= autotune.min_dpi (200) = acceptabel minimum om aan te
-     * bieden, daaronder wordt het formaat niet aangeboden.
+     * Lineaire upscale-factor die nodig is om dit printformaat op 300 DPI
+     * te halen vanaf een bron van deze pixelmaat. Boven ~2 verzint het
+     * generatieve model de meerderheid van de pixels.
+     */
+    public function generativeFactor(int $pixelW, int $pixelH, string $sizeName): ?float
+    {
+        $target = $this->pixelsAt300Dpi($sizeName);
+        if (! $target || $pixelW < 1 || $pixelH < 1) {
+            return null;
+        }
+
+        return round(max($target['width'] / $pixelW, $target['height'] / $pixelH), 2);
+    }
+
+    /**
+     * Haalbaarheid per printformaat voor een bron. Twee eisen:
+     *  1) genoeg output-resolutie: effectieve DPI na een 4x AI-pass
+     *     >= autotune.min_dpi (ideaal >= qc.dpi.ideal);
+     *  2) niet grotendeels verzonnen: de lineaire factor vanaf de bron
+     *     <= upscale.max_generative_factor (Real-ESRGAN is generatief;
+     *     boven ~2x hallucineert het de textuur).
+     * Een formaat wordt alleen aangeboden als aan BEIDE is voldaan.
      */
     public function feasibilityFor(int $pixelW, int $pixelH): array
     {
         $ideal = (int) config('posterforge.qc.dpi.ideal', 300);
         $minimum = (int) config('posterforge.autotune.min_dpi', 200);
+        $maxFactor = (float) config('posterforge.upscale.max_generative_factor', 2.0);
 
         $result = [];
         foreach (config('posterforge.qc.sizes', []) as $size) {
@@ -70,12 +87,18 @@ class DpiValidator
                 continue;
             }
 
+            $factor = $this->generativeFactor($pixelW, $pixelH, $size);
+            $overInvented = $factor !== null && $factor > $maxFactor;
+
             $result[$size] = [
                 'effective_dpi' => $dpi['min_dpi'],
-                'status' => $dpi['min_dpi'] >= $ideal
-                    ? 'ideal'
-                    : ($dpi['min_dpi'] >= $minimum ? 'acceptable' : 'insufficient'),
-                'aanbieden' => $dpi['min_dpi'] >= $minimum,
+                'generative_factor' => $factor,
+                'status' => $overInvented
+                    ? 'te_veel_verzonnen'
+                    : ($dpi['min_dpi'] >= $ideal
+                        ? 'ideal'
+                        : ($dpi['min_dpi'] >= $minimum ? 'acceptable' : 'insufficient')),
+                'aanbieden' => ! $overInvented && $dpi['min_dpi'] >= $minimum,
             ];
         }
 

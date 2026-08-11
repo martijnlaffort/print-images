@@ -60,7 +60,7 @@
                                     @foreach($poster->feasible_sizes as $sizeName => $row)
                                         <span
                                             class="rounded px-1 text-[10px] font-medium {{ $row['status'] === 'ideal' ? 'bg-green-100 text-green-700' : ($row['status'] === 'acceptable' ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-400 line-through') }}"
-                                            title="{{ $row['effective_dpi'] }} DPI effectief na AI-upscale{{ $row['aanbieden'] ? '' : ' — niet aanbieden' }}"
+                                            title="{{ $row['effective_dpi'] }} DPI na AI &middot; factor {{ $row['generative_factor'] ?? '?' }}x{{ $row['status'] === 'te_veel_verzonnen' ? ' — te veel verzonnen, niet aanbieden' : ($row['aanbieden'] ? '' : ' — niet aanbieden') }}"
                                         >{{ $sizeName }}</span>
                                     @endforeach
                                 </p>

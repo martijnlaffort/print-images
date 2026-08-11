@@ -31,33 +31,44 @@ class AutoTuneService
     }
 
     /**
-     * Formaat-gating vóór de dure upscale: haalbaar = effectieve DPI na
-     * één 4x AI-pass boven de configureerbare ondergrens. Geen enkele
-     * instelling kan ontbrekende bronpixels compenseren.
+     * Formaat-gating vóór de dure upscale. Twee eisen: effectieve DPI na
+     * een 4x AI-pass boven de ondergrens, ÉN de lineaire upscale-factor
+     * vanaf de bron onder max_generative_factor (boven ~2x verzint het
+     * generatieve model de meerderheid van de pixels — dat geeft geen
+     * detail maar uitsmering/verzinsel). Geen enkele instelling lost
+     * ontbrekende bronpixels op.
      */
     public function gate(string $sourcePath, string $targetSize): array
     {
         [$w, $h] = $this->dimensions($sourcePath);
         $minDpi = (int) config('posterforge.autotune.min_dpi', 200);
+        $maxFactor = (float) config('posterforge.upscale.max_generative_factor', 2.0);
 
         $dpi = $this->dpiValidator->effectiveDpiFor($w * 4, $h * 4, $targetSize);
         if (! $dpi) {
             throw new RuntimeException("Onbekend printformaat: {$targetSize}");
         }
 
-        // qc.sizes staat van klein naar groot; de laatste haalbare wint.
+        $factor = $this->dpiValidator->generativeFactor($w, $h, $targetSize);
+
+        // Grootste formaat dat zowel genoeg DPI heeft ALS binnen de
+        // generatieve-factor blijft (niet grotendeels verzonnen).
+        // qc.sizes staat van klein naar groot; de laatste die past wint.
         $maxSellable = null;
         foreach (config('posterforge.qc.sizes', []) as $size) {
             $row = $this->dpiValidator->effectiveDpiFor($w * 4, $h * 4, $size);
-            if ($row && $row['min_dpi'] >= $minDpi) {
+            $f = $this->dpiValidator->generativeFactor($w, $h, $size);
+            if ($row && $row['min_dpi'] >= $minDpi && $f !== null && $f <= $maxFactor) {
                 $maxSellable = $size;
             }
         }
 
         return [
-            'feasible' => $dpi['min_dpi'] >= $minDpi,
+            'feasible' => $dpi['min_dpi'] >= $minDpi && $factor !== null && $factor <= $maxFactor,
             'effective_dpi' => $dpi['min_dpi'],
             'min_dpi' => $minDpi,
+            'generative_factor' => $factor,
+            'max_generative_factor' => $maxFactor,
             'max_sellable_size' => $maxSellable,
         ];
     }
