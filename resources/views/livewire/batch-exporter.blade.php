@@ -55,6 +55,16 @@
                         </div>
                         <div class="min-w-0 flex-1">
                             <p class="truncate text-sm font-medium text-gray-900">{{ $poster->title }}</p>
+                            @if(!empty($poster->feasible_sizes))
+                                <p class="mt-0.5 flex flex-wrap gap-1">
+                                    @foreach($poster->feasible_sizes as $sizeName => $row)
+                                        <span
+                                            class="rounded px-1 text-[10px] font-medium {{ $row['status'] === 'ideal' ? 'bg-green-100 text-green-700' : ($row['status'] === 'acceptable' ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-400 line-through') }}"
+                                            title="{{ $row['effective_dpi'] }} DPI effectief na AI-upscale{{ $row['aanbieden'] ? '' : ' — niet aanbieden' }}"
+                                        >{{ $sizeName }}</span>
+                                    @endforeach
+                                </p>
+                            @endif
                         </div>
                     </label>
                 @empty

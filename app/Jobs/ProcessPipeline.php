@@ -13,6 +13,7 @@ use App\Services\ImageFinalizer;
 use App\Services\MagickService;
 use App\Services\MockupService;
 use App\Services\NamingService;
+use App\Services\PrintQcService;
 use App\Services\QualityControlService;
 use App\Services\UpscaleService;
 use Illuminate\Bus\Queueable;
@@ -46,6 +47,7 @@ class ProcessPipeline implements ShouldQueue
         QualityControlService $qcService,
         ImageFinalizer $finalizer,
         MagickService $magick,
+        PrintQcService $printQc,
     ): void {
         set_time_limit(0);
 
@@ -127,11 +129,22 @@ class ProcessPipeline implements ShouldQueue
 
                 $this->reportProgress($task, $currentStep, $totalSteps, "Exporting: {$poster->title}");
 
-                $this->runExport($poster, $namingService, $finalizer, $qcService);
-                $poster->update(['status' => 'exported']);
+                // Een geblokkeerde export mag de rest van de batch niet
+                // meeslepen: vastleggen, melden en door naar de volgende.
+                try {
+                    $this->runExport($poster, $namingService, $finalizer, $qcService, $printQc);
+                    $poster->update(['status' => 'exported']);
 
-                $currentStep++;
-                $this->reportProgress($task, $currentStep, $totalSteps, "Exported: {$poster->title}");
+                    $currentStep++;
+                    $this->reportProgress($task, $currentStep, $totalSteps, "Exported: {$poster->title}");
+                } catch (\RuntimeException $e) {
+                    $blocked[] = $poster->title;
+                    PosterActivity::log($poster->id, 'export_blocked', [
+                        'reasons' => [$e->getMessage()],
+                    ]);
+                    $currentStep++;
+                    $this->reportProgress($task, $currentStep, $totalSteps, "GEBLOKKEERD: {$poster->title}");
+                }
             }
         }
 
@@ -366,6 +379,18 @@ class ProcessPipeline implements ShouldQueue
             $cfg['targetDpi'],
         );
 
+        // Zonder deze log is een afwijkende AI-run (ander model, andere
+        // tegelgrootte, gestrande tegel) achteraf niet te onderscheiden.
+        PosterActivity::log($poster->id, 'upscale_run', [
+            'instellingen' => [
+                'model' => $cfg['model'],
+                'blend' => $cfg['denoise'],
+                'sharpen' => $cfg['sharpen'],
+                'pre_denoise' => $denoiseCfg['enabled'] ? $denoiseCfg['strength'] : 'off',
+            ],
+            'verloop' => $upscaleService->runLog,
+        ]);
+
         // ── Embed ICC profile + true DPI, then final QC ──
         $finalizer->finalize($outputPath, $cfg['targetDpi']);
         $qcService->runAndStore($outputPath, 'output', $poster->id, requirePrintReady: true);
@@ -430,7 +455,7 @@ class ProcessPipeline implements ShouldQueue
         }
     }
 
-    private function runExport(Poster $poster, NamingService $namingService, ImageFinalizer $finalizer, QualityControlService $qcService): void
+    private function runExport(Poster $poster, NamingService $namingService, ImageFinalizer $finalizer, QualityControlService $qcService, PrintQcService $printQc): void
     {
         $cfg = $this->config['export'];
         $outputDir = $cfg['outputDir'];
@@ -441,6 +466,7 @@ class ProcessPipeline implements ShouldQueue
 
         $sourcePath = $poster->upscaled_path;
         $dpiValidator = new DpiValidator();
+        $blockedSizes = [];
 
         foreach ($cfg['sizes'] as $sizeName) {
             $pixels = $dpiValidator->pixelsAt300Dpi($sizeName);
@@ -454,15 +480,30 @@ class ProcessPipeline implements ShouldQueue
 
             $finalizer->exportPrintFile($sourcePath, $outputPath, $pixels['width'], $pixels['height'], 300);
 
-            // Harde poort: volledige QC (incl. ruisdrempel) op elke
-            // eind-export — een te ruizig of niet-print-klaar bestand
-            // laat de pipeline expliciet falen.
+            // Harde poort 1: app-QC op harde criteria (modus, ICC, PNG).
+            // Eerst het bestand blokkeren, dan pas falen.
             $report = $qcService->runAndStore($outputPath, 'export', $poster->id, requirePrintReady: true);
             if ($report->verdict === 'fail') {
+                $printQc->blockFailedPrintReady($poster, $outputPath, $sizeName, $report->reasons);
                 throw new \RuntimeException(
                     "Export {$sizeName} niet print-klaar: " . implode(' ', $report->reasons)
                 );
             }
+
+            // Harde poort 2 (de laatste vóór "klaar voor Gelato"):
+            // printqc.py — exit 2 blokkeert en hernoemt, exit 1 markeert
+            // als handmatig beoordelen.
+            $exportFile = $printQc->guardExport($poster, $outputPath, $sizeName);
+            if ($exportFile->status === 'blocked') {
+                $blockedSizes[] = $sizeName;
+            }
+        }
+
+        if ($blockedSizes) {
+            throw new \RuntimeException(
+                'printqc blokkeerde export(s) ' . implode(', ', $blockedSizes)
+                . ' — zie de QC-pagina voor de bevindingen en crops.'
+            );
         }
     }
 }

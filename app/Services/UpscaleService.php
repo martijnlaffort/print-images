@@ -7,6 +7,15 @@ use RuntimeException;
 
 class UpscaleService
 {
+    /**
+     * Logboek van de laatste (smart)Upscale-run: welke AI-pass draaide
+     * (model, schaal, tegelgrootte, duur, stderr-staart van het binair)
+     * of waarom die werd overgeslagen, en wat het denoise-vangnet deed.
+     * Jobs slaan dit op als 'upscale_run'-activiteit — zonder deze log
+     * is een afwijkende tegel-run achteraf niet te onderscheiden.
+     */
+    public array $runLog = [];
+
     public function __construct(
         private MagickService $magick,
         private DenoiseService $denoiser,
@@ -25,6 +34,14 @@ class UpscaleService
         // in de worker-keten wapent die timer opnieuw ná de jobstart, dus
         // hier nogmaals uitschakelen vlak vóór het lange proces.
         set_time_limit(0);
+
+        // Vaste tegelgrootte uit config wanneer de aanroeper niets kiest.
+        // Auto (-t 0) laat het binair de tegel gokken op basis van het
+        // vrije VRAM op dat moment — de Electron-UI deelt dezelfde GPU,
+        // dus dat pakt per run anders uit.
+        if ($tileSize <= 0) {
+            $tileSize = (int) config('posterforge.upscale.tile_size', 0);
+        }
 
         $binary = $this->getBinaryPath();
         $magick = $this->magick->path();
@@ -47,7 +64,20 @@ class UpscaleService
                 $cmd[] = (string) $tileSize;
             }
 
-            $result = Process::timeout(300)->run($cmd);
+            $startedAt = microtime(true);
+            $result = Process::timeout((int) config('posterforge.upscale.ai_timeout', 1800))->run($cmd);
+
+            $this->runLog[] = $run = [
+                'stap' => 'ai_pass',
+                'model' => $model,
+                'schaal' => $scale,
+                'tegelgrootte' => $tileSize > 0 ? $tileSize : 'auto',
+                'bicubic_blend' => $denoise,
+                'duur_s' => round(microtime(true) - $startedAt, 1),
+                'exit' => $result->exitCode(),
+                'stderr_staart' => substr(trim((string) $result->errorOutput()), -600),
+            ];
+            \Log::info('Upscale AI-pass', $run);
 
             if ($result->failed()) {
                 throw new RuntimeException(
@@ -118,6 +148,7 @@ class UpscaleService
         ?\Closure $onProgress = null,
     ): string {
         set_time_limit(0);
+        $this->runLog = [];
 
         [$origWidth, $origHeight] = $this->getImageDimensions($inputPath);
 
@@ -138,6 +169,15 @@ class UpscaleService
         // eerst als de bron boven de QC-drempel meet, en pas dezelfde
         // milde nabewerking toe als de AI-tak.
         if ($requiredScale <= 1.0) {
+            $this->runLog[] = $run = [
+                'stap' => 'ai_overgeslagen',
+                'reden' => sprintf(
+                    'bron %dx%d dekt doel %dx%d al (factor %.2f); vangnet controleert de bronruis',
+                    $origWidth, $origHeight, $targetWidth, $targetHeight, $requiredScale,
+                ),
+            ];
+            \Log::info('Upscale: AI-pass overgeslagen', $run);
+
             try {
                 $report(20);
                 $currentInput = $this->denoiseIfNeeded($inputPath, $tempDir, $tempFiles);
@@ -296,7 +336,15 @@ class UpscaleService
 
         $threshold = (float) config('posterforge.qc.noise.pass', 3.0);
         $noise = $this->qc->noiseSd($inputPath);
+
         if ($noise <= $threshold) {
+            $this->runLog[] = [
+                'stap' => 'vangnet_meting',
+                'ruis' => $noise,
+                'drempel' => $threshold,
+                'actie' => 'geen denoise nodig',
+            ];
+
             return $inputPath;
         }
 
@@ -328,6 +376,15 @@ class UpscaleService
             }
             $idx++;
         }
+
+        $this->runLog[] = $run = [
+            'stap' => 'vangnet_denoise',
+            'sterkte' => $order[$idx],
+            'ruis_voor' => $noise,
+            'ruis_na' => $this->qc->noiseSd($denoised),
+            'drempel' => $threshold,
+        ];
+        \Log::info('Denoise-vangnet toegepast', $run);
 
         return $denoised;
     }

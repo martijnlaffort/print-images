@@ -4,6 +4,7 @@ namespace App\Livewire;
 
 use App\Jobs\RunQcBatch;
 use App\Models\BackgroundTask;
+use App\Models\ExportFile;
 use App\Models\Poster;
 use App\Models\QcReport;
 use Livewire\Component;
@@ -15,6 +16,7 @@ class QualityControl extends Component
 
     public string $verdictFilter = '';
     public ?int $detailReport = null;
+    public ?int $exportDetail = null;
     public bool $processing = false;
     public ?int $batchTaskId = null;
 
@@ -119,6 +121,31 @@ class QualityControl extends Component
         $this->detailReport = null;
     }
 
+    public function showExport(int $id): void
+    {
+        $this->exportDetail = $id;
+    }
+
+    public function closeExport(): void
+    {
+        $this->exportDetail = null;
+    }
+
+    public function getExportFilesProperty()
+    {
+        return ExportFile::with('poster')
+            ->orderByDesc('created_at')
+            ->limit(30)
+            ->get();
+    }
+
+    public function getExportFileProperty(): ?ExportFile
+    {
+        return $this->exportDetail
+            ? ExportFile::with('poster')->find($this->exportDetail)
+            : null;
+    }
+
     public function updatedVerdictFilter(): void
     {
         $this->resetPage();
@@ -172,6 +199,8 @@ class QualityControl extends Component
             'summary' => $this->summary,
             'report' => $this->report,
             'taskProgress' => $this->taskProgress,
+            'exportFiles' => $this->exportFiles,
+            'exportFile' => $this->exportFile,
         ]);
     }
 }

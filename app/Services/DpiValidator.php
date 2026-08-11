@@ -50,6 +50,38 @@ class DpiValidator
         ];
     }
 
+    /**
+     * Haalbaarheid per printformaat voor een bron, met dezelfde rekenregel
+     * als de autotune-gate: effectieve DPI na één 4x AI-pass. Verder
+     * opschalen dan 4x voegt geen detail toe (geeft uitsmering, geen
+     * korrel), dus dit is de eerlijke bovengrens. >= qc.dpi.ideal (300) =
+     * ideaal, >= autotune.min_dpi (200) = acceptabel minimum om aan te
+     * bieden, daaronder wordt het formaat niet aangeboden.
+     */
+    public function feasibilityFor(int $pixelW, int $pixelH): array
+    {
+        $ideal = (int) config('posterforge.qc.dpi.ideal', 300);
+        $minimum = (int) config('posterforge.autotune.min_dpi', 200);
+
+        $result = [];
+        foreach (config('posterforge.qc.sizes', []) as $size) {
+            $dpi = $this->effectiveDpiFor($pixelW * 4, $pixelH * 4, $size);
+            if (! $dpi) {
+                continue;
+            }
+
+            $result[$size] = [
+                'effective_dpi' => $dpi['min_dpi'],
+                'status' => $dpi['min_dpi'] >= $ideal
+                    ? 'ideal'
+                    : ($dpi['min_dpi'] >= $minimum ? 'acceptable' : 'insufficient'),
+                'aanbieden' => $dpi['min_dpi'] >= $minimum,
+            ];
+        }
+
+        return $result;
+    }
+
     public function allSizes(): array
     {
         $sizes = self::SIZES;

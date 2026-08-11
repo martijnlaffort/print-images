@@ -24,6 +24,20 @@ Route::get('/export', BatchExporter::class);
 Route::get('/qc', QualityControl::class);
 Route::get('/settings', Settings::class);
 
+Route::get('/export-crop/{exportFile}/{index}', function (\App\Models\ExportFile $exportFile, int $index) {
+    $crops = $exportFile->crops();
+    $path = $crops[$index] ?? null;
+
+    if (! $path || ! file_exists($path)) {
+        abort(404);
+    }
+
+    return response()->file($path, [
+        'Content-Type' => mime_content_type($path),
+        'Cache-Control' => 'public, max-age=3600',
+    ]);
+})->name('export.crop');
+
 Route::get('/qc-image/{report}', function (\App\Models\QcReport $report) {
     $path = $report->comparison_image_path;
 

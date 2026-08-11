@@ -16,6 +16,16 @@ return [
         // Bicubic-blend ("AI-blend"): 0 volgens benchmark 20260721 — elke
         // blend > 25 kostte aantoonbaar detail zonder ruisvoordeel.
         'default_denoise' => 0,
+
+        // Vaste tegelgrootte voor realesrgan-ncnn-vulkan (-t). 0 = auto,
+        // maar auto kiest de tegel op basis van het vrije VRAM op het
+        // startmoment — en de Electron-UI deelt dezelfde 4GB GPU, dus dat
+        // is per run anders. Een vaste waarde maakt runs reproduceerbaar
+        // en verkleint de kans op corrupte/vlakke tegels door VRAM-druk.
+        // Minimaal 32. Verlaag naar 128 als er OOM-artefacten optreden.
+        // NB: de tegel-overlap is NIET instelbaar in dit binair (zit
+        // hard gecompileerd); alleen de tegelgrootte is te sturen.
+        'tile_size' => 256,
         'models' => [
             'realesrgan-x4plus-anime' => 'Real-ESRGAN x4+ (Illustration/Poster)',
             'realesrgan-x4plus' => 'Real-ESRGAN x4+ (Photo-realistic)',
@@ -59,6 +69,27 @@ return [
         // Point this at a Gelato-specific profile later if they advise one.
         'profile_path' => env('ICC_PROFILE_PATH'),
         'embed' => true,
+    ],
+
+    /*
+     * printqc.py — de laatste poort vóór "klaar voor Gelato". Draait als
+     * los Python-script (gebundeld in bin/printqc) in een door de app
+     * beheerde venv met pillow + numpy. Exitcode 0 = vrijgeven,
+     * 1 = handmatig beoordelen, 2 = blokkeren (bestand wordt hernoemd
+     * naar *_GEBLOKKEERD.png zodat het nooit per ongeluk naar Gelato gaat).
+     * Kan de poort zelf niet draaien (geen Python, venv stuk), dan wordt
+     * de export als 'handmatig beoordelen' gemarkeerd — nooit stilzwijgend
+     * vrijgegeven.
+     */
+    'printqc' => [
+        // Basis-Python om de venv mee te bootstrappen; leeg = zelf zoeken
+        // (python / py -3 op PATH).
+        'python' => env('PRINTQC_PYTHON'),
+        'timeout' => 900,
+        // Formaten die printqc.py kent; alleen daarvoor wordt --formaat
+        // meegegeven. Andere formaten krijgen van het script zelf een
+        // REVIEW ("resolutiecontrole overgeslagen") = handmatig beoordelen.
+        'formats' => ['30x40', '40x50', '50x70', '70x100'],
     ],
 
     /*
@@ -173,11 +204,19 @@ return [
         'block_size' => 64,
         'flattest_count' => 50,
         // Mean standard deviation (0-255 scale) of the flattest blocks.
-        // Ruis-sd (gemiddelde van de vlakste blokken). De banden gelden
-        // alleen als de meting betrouwbaar is: het állervlakste blok moet
-        // onder 'reliable_max' zitten. Zit het daarboven, dan heeft het
-        // beeld geen egale vlakken en meet de methode échte textuur —
-        // status wordt dan 'unreliable' (geen hard oordeel).
+        // Ruis-sd (gemiddelde van de vlakste blokken, gemeten op
+        // GRIJSWAARDEN — deze meting heeft de kanaalspreidings-bug van de
+        // oude numpy-scripts niet). De banden gelden alleen als de meting
+        // betrouwbaar is: het állervlakste blok moet onder 'reliable_max'
+        // zitten; anders meet de methode textuur en is de status
+        // 'unreliable'.
+        //
+        // LET OP — ONGEIJKT: deze getallen stammen uit de kalibratie die
+        // ongeldig is verklaard (geijkt tegen de foute kanaal-brede
+        // meting). Ruis geeft daarom NOOIT meer een harde FAIL, alleen
+        // een waarschuwing/handmatige beoordeling, totdat de banden
+        // opnieuw geijkt zijn tegen een fysieke print. Geen nieuwe
+        // getallen verzinnen — ijking doet de gebruiker zelf.
         'noise' => [
             'pass' => 3.0,
             'warn' => 4.5,

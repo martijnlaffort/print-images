@@ -183,6 +183,18 @@ class UpscaleImage implements ShouldQueue
             },
         );
 
+        // Zonder deze log is een afwijkende AI-run (ander model, andere
+        // tegelgrootte, gestrande tegel) achteraf niet te onderscheiden.
+        PosterActivity::log($this->poster->id, 'upscale_run', [
+            'instellingen' => [
+                'model' => $this->model,
+                'blend' => $this->denoise,
+                'sharpen' => $this->sharpen,
+                'pre_denoise' => $this->preDenoise ? $this->preDenoiseStrength : 'off',
+            ],
+            'verloop' => $upscaleService->runLog,
+        ]);
+
         // ── Embed ICC profile + true DPI on the output ──
         $this->progress($bgTask, 'icc-dpi', 82);
         $finalizer->finalize($outputPath, $this->targetDpi);

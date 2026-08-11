@@ -12,7 +12,10 @@ use Livewire\Component;
 class BatchExporter extends Component
 {
     public array $selectedPosters = [];
-    public array $selectedSizes = ['A4', 'A3'];
+    // Default = de verkoopformaten die printqc kent; A-formaten kunnen
+    // nog steeds handmatig aangevinkt worden maar krijgen van printqc
+    // altijd "handmatig beoordelen" (het script kent ze niet).
+    public array $selectedSizes = ['50x70', '70x100'];
     public string $outputDir = '';
     public string $namingPattern = '{title}_{size}.png';
     public int $outputQuality = 92;
@@ -109,21 +112,36 @@ class BatchExporter extends Component
             ->count();
 
         if ($activeTasks === 0) {
+            $since = $this->processingStartedAt;
+
             $failedTasks = BackgroundTask::where('type', 'export')
                 ->where('status', 'failed')
-                ->when($this->processingStartedAt, fn ($q) => $q->where('created_at', '>=', $this->processingStartedAt))
+                ->when($since, fn ($q) => $q->where('created_at', '>=', $since))
                 ->get();
 
             $this->processing = false;
             $this->processingStartedAt = null;
 
-            if ($failedTasks->isNotEmpty()) {
-                $firstError = $failedTasks->first()->error_message ?? 'Onbekende fout';
-                $this->dispatch('toast', type: 'error', message: "{$failedTasks->count()} export(s) mislukt: {$firstError}");
-            } else {
-                // Mark posters as exported
+            // De printqc-uitslag per bestand bepaalt wat er echt klaar
+            // voor Gelato is — dat hoort in de afrondingsmelding thuis.
+            $files = \App\Models\ExportFile::whereIn('poster_id', $this->selectedPosters)
+                ->when($since, fn ($q) => $q->where('created_at', '>=', $since))
+                ->get();
+            $blocked = $files->where('status', 'blocked')->count();
+            $review = $files->where('status', 'review')->count();
+            $released = $files->where('status', 'released')->count();
+
+            if ($failedTasks->isNotEmpty() || $blocked > 0) {
+                $firstError = $failedTasks->first()?->error_message ?? '';
+                $this->dispatch('toast', type: 'error', message: trim(
+                    "Export afgerond met problemen: {$released} vrijgegeven, {$review} handmatig beoordelen, {$blocked} geblokkeerd. {$firstError}"
+                ));
+            } elseif ($review > 0) {
                 Poster::whereIn('id', $this->selectedPosters)->update(['status' => 'exported']);
-                $this->dispatch('toast', type: 'success', message: "All {$this->exportTotal} poster(s) exported.");
+                $this->dispatch('toast', type: 'info', message: "Export afgerond: {$released} vrijgegeven, {$review} handmatig beoordelen — zie de QC-pagina.");
+            } else {
+                Poster::whereIn('id', $this->selectedPosters)->update(['status' => 'exported']);
+                $this->dispatch('toast', type: 'success', message: "Export afgerond: alle {$released} bestand(en) door printqc vrijgegeven.");
             }
 
             $this->exportTotal = 0;
@@ -162,11 +180,30 @@ class BatchExporter extends Component
 
         $posters = Poster::whereIn('id', $this->selectedPosters)->get();
         $count = 0;
+        $skipped = 0;
 
         foreach ($posters as $poster) {
             $pattern = $poster->slug . '_*';
             $files = glob($outputDir . '/' . $pattern);
             foreach ($files as $file) {
+                // De ZIP is het pakket richting Gelato: alleen échte
+                // printbestanden die door de printqc-poort zijn
+                // vrijgegeven. Geblokkeerde bestanden, json-bijlagen en
+                // review-bestanden mogen de poort niet via de ZIP omzeilen.
+                if (! preg_match('/\.png$/i', $file) || str_contains(basename($file), '_GEBLOKKEERD')) {
+                    $skipped++;
+                    continue;
+                }
+
+                $record = \App\Models\ExportFile::where('path', str_replace('\\', '/', $file))
+                    ->orWhere('path', $file)
+                    ->orderByDesc('id')
+                    ->first();
+                if ($record && $record->status !== 'released') {
+                    $skipped++;
+                    continue;
+                }
+
                 $zip->addFile($file, basename($file));
                 $count++;
             }
@@ -176,19 +213,36 @@ class BatchExporter extends Component
 
         if ($count === 0) {
             @unlink($zipPath);
-            $this->dispatch('toast', type: 'error', message: 'No export files found.');
+            $this->dispatch('toast', type: 'error', message: $skipped > 0
+                ? "Geen vrijgegeven exportbestanden — {$skipped} bestand(en) overgeslagen (geblokkeerd/handmatig beoordelen)."
+                : 'No export files found.');
             return;
         }
 
-        $this->dispatch('toast', type: 'success', message: "ZIP created with {$count} file(s).");
+        $this->dispatch('toast', type: 'success', message: "ZIP met {$count} vrijgegeven bestand(en)." . ($skipped > 0 ? " {$skipped} overgeslagen (geblokkeerd/beoordelen/bijlagen)." : ''));
         $this->redirect(route('file.download', ['path' => $zipPath]), navigate: false);
     }
 
     public function getPostersProperty()
     {
-        return Poster::whereIn('status', ['upscaled', 'mockups_ready', 'exported'])
+        $posters = Poster::whereIn('status', ['upscaled', 'mockups_ready', 'exported'])
             ->orderByDesc('created_at')
             ->get();
+
+        // Haalbare formaten eenmalig bijvullen voor oudere posters, zodat
+        // de blade alleen het (gecachte) attribuut hoeft te lezen en niet
+        // per render de schijf/DB raakt.
+        foreach ($posters as $poster) {
+            if ($poster->feasible_sizes === null) {
+                try {
+                    $poster->refreshFeasibleSizes();
+                } catch (\Throwable) {
+                    // Onleesbaar bronbestand mag de lijst niet breken.
+                }
+            }
+        }
+
+        return $posters;
     }
 
     public function render()

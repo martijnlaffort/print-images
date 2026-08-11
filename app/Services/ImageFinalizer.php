@@ -62,6 +62,11 @@ class ImageFinalizer
     {
         return [
             '-background', 'white', '-alpha', 'remove', '-alpha', 'off',
+            // Truecolor afdwingen: bij weinig unieke kleuren (vlakke
+            // designs) optimaliseert ImageMagick naar een palette-PNG
+            // (modus P) en daar struikelt de printketen over — printqc
+            // keurt dat terecht af.
+            '-define', 'png:color-type=2',
             '-density', (string) $dpi, '-units', 'PixelsPerInch',
             ...$this->profileArgs(),
         ];

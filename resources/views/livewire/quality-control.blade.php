@@ -42,6 +42,56 @@
         </button>
     </div>
 
+    {{-- Export-vrijgave (printqc) --}}
+    <div class="mb-6">
+        <h2 class="mb-2 text-sm font-semibold text-gray-700 uppercase tracking-wide">Export-vrijgave (printqc-poort)</h2>
+        <div class="rounded-lg bg-white shadow-sm border border-gray-200 overflow-hidden">
+            <table class="min-w-full divide-y divide-gray-200 text-sm">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th class="px-4 py-2 text-left text-xs font-semibold text-gray-500 uppercase">Bestand</th>
+                        <th class="px-4 py-2 text-left text-xs font-semibold text-gray-500 uppercase">Formaat</th>
+                        <th class="px-4 py-2 text-left text-xs font-semibold text-gray-500 uppercase">Status</th>
+                        <th class="px-4 py-2 text-left text-xs font-semibold text-gray-500 uppercase">Bevindingen</th>
+                        <th class="px-4 py-2 text-left text-xs font-semibold text-gray-500 uppercase">Datum</th>
+                        <th class="px-4 py-2"></th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-100">
+                    @forelse($exportFiles as $f)
+                        <tr class="hover:bg-gray-50 cursor-pointer" wire:click="showExport({{ $f->id }})">
+                            <td class="px-4 py-2 font-medium text-gray-900 max-w-[280px] truncate" title="{{ $f->path }}">{{ basename($f->path) }}</td>
+                            <td class="px-4 py-2 text-gray-500">{{ $f->size }}</td>
+                            <td class="px-4 py-2">
+                                @if($f->status === 'released')
+                                    <span class="inline-flex items-center rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700">VRIJGEGEVEN &#9989;</span>
+                                @elseif($f->status === 'review')
+                                    <span class="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700">HANDMATIG BEOORDELEN &#9888;&#65039;</span>
+                                @else
+                                    <span class="inline-flex items-center rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700">GEBLOKKEERD &#9940;</span>
+                                @endif
+                            </td>
+                            <td class="px-4 py-2 text-gray-500">
+                                {{ count($f->findings ?? []) }} bevinding{{ count($f->findings ?? []) === 1 ? '' : 'en' }}
+                                @if(($f->meta['uitval_blokken'] ?? 0) > 0)
+                                    <span class="text-red-600">&middot; {{ $f->meta['uitval_blokken'] }} blokken detailuitval</span>
+                                @endif
+                            </td>
+                            <td class="px-4 py-2 text-gray-400 text-xs whitespace-nowrap">{{ $f->created_at->format('d-m H:i') }}</td>
+                            <td class="px-4 py-2 text-right text-xs text-indigo-600">bekijk</td>
+                        </tr>
+                    @empty
+                        <tr>
+                            <td colspan="6" class="px-4 py-6 text-center text-gray-400">
+                                Nog geen exports door de printqc-poort gegaan. Elke nieuwe export wordt hier automatisch gekeurd.
+                            </td>
+                        </tr>
+                    @endforelse
+                </tbody>
+            </table>
+        </div>
+    </div>
+
     {{-- Rapporten --}}
     <div class="rounded-lg bg-white shadow-sm border border-gray-200 overflow-hidden">
         <table class="min-w-full divide-y divide-gray-200 text-sm">
@@ -68,7 +118,7 @@
                             {{ ['source' => 'bron', 'denoised' => 'na denoise', 'output' => 'output'][$r->phase] ?? $r->phase }}
                         </td>
                         <td class="px-4 py-2">
-                            @php($ns = $r->metrics['noise']['status'] ?? null)
+                            @php $ns = $r->metrics['noise']['status'] ?? null; @endphp
                             <span class="{{ in_array($ns, ['fail', 'noisy']) ? 'text-red-600 font-semibold' : (in_array($ns, ['warn', 'acceptable']) ? 'text-amber-600' : 'text-gray-700') }}">
                                 {{ number_format($r->metrics['noise']['flattest_mean_sd'] ?? 0, 2) }}
                             </span>
@@ -152,11 +202,11 @@
                         @endif
                     </div>
 
-                    @php($m = $report->metrics)
+                    @php $m = $report->metrics; @endphp
 
                     {{-- Denoise vóór/ná --}}
                     @if($report->comparison)
-                        @php($c = $report->comparison)
+                        @php $c = $report->comparison; @endphp
                         <div>
                             <h3 class="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-2">Denoise-effect (v&oacute;&oacute;r &rarr; n&aacute;)</h3>
                             <div class="grid grid-cols-3 gap-3 text-sm">
@@ -203,7 +253,7 @@
                         <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 text-sm">
                             <div class="rounded-lg border border-gray-200 p-3">
                                 <p class="text-xs text-gray-500">Ruis vlakste {{ $m['noise']['blocks_used'] ?? 50 }} blokken</p>
-                                @php($ns = $m['noise']['status'] ?? '')
+                                @php $ns = $m['noise']['status'] ?? ''; @endphp
                                 <p class="font-semibold {{ in_array($ns, ['fail', 'noisy']) ? 'text-red-600' : (in_array($ns, ['warn', 'acceptable']) ? 'text-amber-600' : ($ns === 'unreliable' ? 'text-gray-500' : 'text-green-600')) }}">
                                     sd {{ number_format($m['noise']['flattest_mean_sd'] ?? 0, 2) }}
                                     @if($ns === 'unreliable')
@@ -308,6 +358,111 @@
                             </tbody>
                         </table>
                     </div>
+                </div>
+            </div>
+        </div>
+    @endif
+
+    {{-- Export-vrijgave detail --}}
+    @if($exportFile)
+        <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-6" wire:click.self="closeExport">
+            <div class="max-h-full w-full max-w-3xl overflow-y-auto rounded-lg bg-white shadow-xl">
+                <div class="flex items-center justify-between border-b border-gray-100 px-6 py-4 sticky top-0 bg-white">
+                    <div>
+                        <h2 class="text-lg font-bold text-gray-900">{{ basename($exportFile->path) }}</h2>
+                        <p class="text-xs text-gray-400">{{ $exportFile->poster?->title }} &middot; {{ $exportFile->size }} cm &middot; md5 {{ $exportFile->md5 ?? '?' }}</p>
+                    </div>
+                    <button wire:click="closeExport" class="text-gray-400 hover:text-gray-600 text-xl leading-none">&times;</button>
+                </div>
+
+                <div class="p-6 space-y-6">
+                    @php
+                        $ec = ['released' => ['bg-green-50 border-green-200', 'text-green-700'], 'review' => ['bg-amber-50 border-amber-200', 'text-amber-700'], 'blocked' => ['bg-red-50 border-red-200', 'text-red-700']][$exportFile->status] ?? ['bg-gray-50 border-gray-200', 'text-gray-700'];
+                        $pm = $exportFile->meta ?? [];
+                    @endphp
+                    <div class="rounded-lg border p-4 {{ $ec[0] }}">
+                        <p class="text-base font-bold {{ $ec[1] }}">
+                            {{ $exportFile->statusLabel() }}
+                            {{ $exportFile->status === 'released' ? '✅' : ($exportFile->status === 'review' ? '⚠️' : '⛔') }}
+                        </p>
+                        @if($exportFile->status === 'blocked')
+                            @if(str_contains(basename($exportFile->path), '_GEBLOKKEERD'))
+                                <p class="mt-1 text-sm text-red-700">Bestand is hernoemd naar *_GEBLOKKEERD.png &mdash; niet naar Gelato sturen.</p>
+                            @else
+                                <p class="mt-1 text-sm font-semibold text-red-700">LET OP: hernoemen is mislukt &mdash; het afgekeurde bestand staat nog als &ldquo;{{ basename($exportFile->path) }}&rdquo; in de exportmap. Verwijder of verplaats het zelf.</p>
+                            @endif
+                        @elseif($exportFile->status === 'review')
+                            <p class="mt-1 text-sm text-amber-700">Bekijk de bevindingen en crops hieronder en beoordeel zelf of dit bestand naar Gelato mag.</p>
+                        @endif
+                    </div>
+
+                    @if($exportFile->findings)
+                        <div>
+                            <h3 class="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-2">Bevindingen</h3>
+                            <ul class="space-y-1.5 text-sm">
+                                @foreach($exportFile->findings as $b)
+                                    <li class="flex items-start gap-2">
+                                        <span class="mt-0.5 inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-[10px] font-bold {{ ($b['niveau'] ?? '') === 'FAIL' ? 'bg-red-100 text-red-700' : (($b['niveau'] ?? '') === 'REVIEW' ? 'bg-amber-100 text-amber-700' : 'bg-green-100 text-green-700') }}">{{ $b['niveau'] ?? '?' }}</span>
+                                        <span class="text-gray-700"><span class="font-semibold">{{ $b['check'] ?? '' }}</span>: {{ $b['tekst'] ?? '' }}</span>
+                                    </li>
+                                @endforeach
+                            </ul>
+                        </div>
+                    @endif
+
+                    @if($pm)
+                        <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 text-sm">
+                            <div class="rounded-lg border border-gray-200 p-3">
+                                <p class="text-xs text-gray-500">Korrel (per kanaal)</p>
+                                <p class="font-semibold text-gray-900">{{ $pm['korrel'] ?? '?' }} <span class="text-xs font-normal text-gray-400">({{ $pm['vlakke_blokken'] ?? '?' }} vlakke blokken)</span></p>
+                            </div>
+                            <div class="rounded-lg border border-gray-200 p-3">
+                                <p class="text-xs text-gray-500">Detailuitval</p>
+                                <p class="font-semibold {{ ($pm['uitval_blokken'] ?? 0) > 0 ? 'text-red-600' : 'text-gray-900' }}">{{ $pm['uitval_blokken'] ?? 0 }} blokken</p>
+                            </div>
+                            <div class="rounded-lg border border-gray-200 p-3">
+                                <p class="text-xs text-gray-500">Scherpte (globaal)</p>
+                                <p class="font-semibold text-gray-900">{{ $pm['scherpte_globaal'] ?? '?' }}</p>
+                            </div>
+                            <div class="rounded-lg border border-gray-200 p-3">
+                                <p class="text-xs text-gray-500">Bestand</p>
+                                <p class="font-semibold text-gray-900">{{ $pm['modus'] ?? '?' }}/{{ $pm['formaat_container'] ?? '?' }}</p>
+                                <p class="text-[11px] text-gray-400">{{ ($pm['afmetingen'][0] ?? '?') }} &times; {{ ($pm['afmetingen'][1] ?? '?') }} px &middot; ICC: {{ $pm['icc'] ?? 'ontbreekt' }}</p>
+                            </div>
+                        </div>
+                    @endif
+
+                    @if(count($exportFile->crops()))
+                        <div>
+                            <h3 class="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-2">Verdachte plekken &mdash; eerste beeld is de overzichtskaart (rood = verdacht), daarna 100%-crops</h3>
+                            <div class="grid grid-cols-2 gap-3">
+                                @foreach($exportFile->crops() as $i => $crop)
+                                    @if(file_exists($crop))
+                                        <div class="rounded-lg border border-gray-200 overflow-hidden">
+                                            <img src="{{ route('export.crop', ['exportFile' => $exportFile->id, 'index' => $i]) }}" class="w-full" alt="{{ basename($crop) }}">
+                                            <p class="px-2 py-1 text-[11px] text-gray-500 bg-gray-50 border-t border-gray-200 truncate" title="{{ $crop }}">{{ basename($crop) }}</p>
+                                        </div>
+                                    @endif
+                                @endforeach
+                            </div>
+                        </div>
+                    @endif
+
+                    @if(!empty($pm['naden']))
+                        <div>
+                            <h3 class="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-1">Gemelde naden</h3>
+                            <p class="mb-1.5 text-xs text-gray-500">printqc maakt geen crops van naden &mdash; controleer de positie zelf op 100% zoom. Let op: een rechte lijn in het ontwerp (bv. een plankvoeg) geeft dezelfde melding.</p>
+                            <ul class="space-y-0.5 text-xs text-gray-700">
+                                @foreach($pm['naden'] as $n)
+                                    <li>{{ $n['as'] }} <span class="font-semibold">{{ $n['positie'] }}</span> &mdash; segment {{ $n['segment'][0] ?? '?' }}&ndash;{{ $n['segment'][1] ?? '?' }}, dekking {{ $n['dekking'] ?? '?' }}</li>
+                                @endforeach
+                            </ul>
+                        </div>
+                    @endif
+
+                    @if($exportFile->json_path)
+                        <p class="text-xs text-gray-400">Volledige uitslag bewaard naast het bestand: {{ $exportFile->json_path }}</p>
+                    @endif
                 </div>
             </div>
         </div>

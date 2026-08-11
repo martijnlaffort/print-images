@@ -97,12 +97,14 @@ class QualityControlService
         $warn = [];
         $cfg = config('posterforge.qc');
 
-        // Ruis: hard oordeel alleen als de meting betrouwbaar is (het
-        // beeld heeft egale vlakken); anders expliciet "niet meetbaar"
-        // als aandachtspunt — nooit een vals FAIL op textuur.
+        // Ruis is een heuristiek met ONGEIJKTE banden (de oude kalibratie
+        // is ongeldig verklaard) en geeft daarom nooit een harde FAIL —
+        // een hoge waarde betekent handmatig beoordelen, meer niet. Harde
+        // criteria (modus, ICC, PNG) blijven wél hard; de korrelpoort
+        // voor exports is printqc.py.
         $noiseStatus = $metrics['noise']['status'];
         if ($noiseStatus === 'fail' || $noiseStatus === 'noisy') {
-            $fail[] = sprintf('Ruis in egale vlakken te hoog: sd %.2f (> %.1f)', $metrics['noise']['flattest_mean_sd'], $cfg['noise']['warn'] ?? 4.5);
+            $warn[] = sprintf('Hoge ruis in egale vlakken: sd %.2f (ongeijkte drempel %.1f) — beoordeel handmatig of via een fysieke sample.', $metrics['noise']['flattest_mean_sd'], $cfg['noise']['warn'] ?? 4.5);
         } elseif ($noiseStatus === 'warn' || $noiseStatus === 'acceptable') {
             $warn[] = sprintf('Verhoogde ruis in egale vlakken: sd %.2f (band %.1f-%.1f) — kritisch beoordelen.', $metrics['noise']['flattest_mean_sd'], $cfg['noise']['pass'] ?? 3.0, $cfg['noise']['warn'] ?? 4.5);
         } elseif ($noiseStatus === 'unreliable') {

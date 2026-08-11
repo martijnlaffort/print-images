@@ -7,6 +7,7 @@ use App\Models\PosterActivity;
 use App\Services\DpiValidator;
 use App\Services\ImageFinalizer;
 use App\Services\NamingService;
+use App\Services\PrintQcService;
 use App\Services\QualityControlService;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -35,6 +36,7 @@ class GenerateSizeVariants implements ShouldQueue
         NamingService $namingService,
         ImageFinalizer $finalizer,
         QualityControlService $qcService,
+        PrintQcService $printQc,
     ): void {
         set_time_limit(0);
 
@@ -77,6 +79,9 @@ class GenerateSizeVariants implements ShouldQueue
 
         $dpiValidator = new DpiValidator();
 
+        $blockedSizes = [];
+        $reviewSizes = [];
+
         foreach ($this->sizes as $sizeName) {
             $pixels = $dpiValidator->pixelsAt300Dpi($sizeName);
             if (! $pixels) {
@@ -89,19 +94,36 @@ class GenerateSizeVariants implements ShouldQueue
 
             $finalizer->exportPrintFile($sourcePath, $outputPath, $pixels['width'], $pixels['height'], 300);
 
-            // Harde poort: volledige QC (incl. ruisdrempel) op elke
-            // eind-export — een te ruizig of niet-print-klaar bestand
-            // laat de taak expliciet falen.
+            // Harde poort 1: volledige app-QC op harde criteria (modus,
+            // ICC, PNG). Het al geschreven bestand wordt eerst
+            // geblokkeerd/hernoemd, daarna faalt de taak expliciet —
+            // nooit een afgekeurd bestand onbewaakt laten staan.
             $report = $qcService->runAndStore($outputPath, 'export', $this->poster->id, requirePrintReady: true);
             if ($report->verdict === 'fail') {
+                $printQc->blockFailedPrintReady($this->poster, $outputPath, $sizeName, $report->reasons);
                 throw new RuntimeException(
                     "Export {$sizeName} niet print-klaar: " . implode(' ', $report->reasons)
                 );
+            }
+
+            // Harde poort 2 (de laatste vóór "klaar voor Gelato"):
+            // printqc.py. Exit 2 blokkeert en hernoemt het bestand,
+            // exit 1 markeert het als handmatig beoordelen. Bewust géén
+            // exception: de andere formaten/posters op dezelfde
+            // achtergrondtaak moeten gewoon doorlopen en de eindtoast
+            // telt de uitslag per bestand uit export_files.
+            $exportFile = $printQc->guardExport($this->poster, $outputPath, $sizeName);
+            if ($exportFile->status === 'blocked') {
+                $blockedSizes[] = $sizeName;
+            } elseif ($exportFile->status === 'review') {
+                $reviewSizes[] = $sizeName;
             }
         }
 
         PosterActivity::log($this->poster->id, 'exported', [
             'sizes' => $this->sizes,
+            'geblokkeerd' => $blockedSizes,
+            'handmatig_beoordelen' => $reviewSizes,
         ]);
 
         if ($this->backgroundTaskId) {

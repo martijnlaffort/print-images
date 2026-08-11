@@ -21,11 +21,13 @@ class Poster extends Model
         'metadata',
         'file_hash',
         'pushed_at',
+        'feasible_sizes',
     ];
 
     protected $casts = [
         'metadata' => 'array',
         'pushed_at' => 'datetime',
+        'feasible_sizes' => 'array',
     ];
 
     public function generatedMockups(): HasMany
@@ -59,13 +61,59 @@ class Poster extends Model
         $filename = pathinfo($path, PATHINFO_FILENAME);
         $title = Str::title(str_replace(['-', '_'], ' ', $filename));
 
-        return static::create([
+        $poster = static::create([
             'title' => $title,
             'slug' => Str::slug($filename),
             'original_path' => $path,
             'status' => 'imported',
             'file_hash' => $hash ?: null,
         ]);
+
+        // Haalbare printformaten direct bij import vastleggen; een
+        // onleesbaar bestand mag de import zelf niet laten stranden.
+        try {
+            $poster->refreshFeasibleSizes();
+        } catch (\Throwable $e) {
+            \Log::warning('Kon haalbare formaten niet bepalen bij import', [
+                'poster' => $poster->id,
+                'fout' => $e->getMessage(),
+            ]);
+        }
+
+        return $poster;
+    }
+
+    /**
+     * Haalbare printformaten voor dit design (effectieve DPI na 4x
+     * AI-upscale; zie DpiValidator::feasibilityFor). Bij import gevuld;
+     * voor oudere posters wordt het hier alsnog berekend en bewaard.
+     */
+    public function feasibleSizes(): array
+    {
+        if ($this->feasible_sizes !== null) {
+            return $this->feasible_sizes;
+        }
+
+        try {
+            return $this->refreshFeasibleSizes();
+        } catch (\Throwable) {
+            return [];
+        }
+    }
+
+    public function refreshFeasibleSizes(): array
+    {
+        $info = @getimagesize($this->original_path);
+        if ($info === false) {
+            return [];
+        }
+
+        $sizes = app(\App\Services\DpiValidator::class)
+            ->feasibilityFor((int) $info[0], (int) $info[1]);
+
+        $this->forceFill(['feasible_sizes' => $sizes])->save();
+
+        return $sizes;
     }
 
     public function getDisplayImageAttribute(): string
