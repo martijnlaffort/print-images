@@ -211,14 +211,15 @@ class UpscaleService
         }
 
         try {
-            // Single AI upscale pass (max 4x), then Lanczos resize to target.
-            // Multi-pass is too slow: the second AI pass operates on a massive image.
-            $passScale = $requiredScale <= 2.0 ? 2 : 4;
-
-            // Plafond op de generatieve stap. Op 2 wordt dit een
-            // twee-traps upscale: een bescheiden AI 2x-pass en Lanczos
-            // voor de rest — minder verzonnen textuur (iets zachter).
-            $passScale = max(2, min($passScale, (int) config('posterforge.upscale.max_ai_pass_scale', 4)));
+            // Altijd de NATIVE 4x-pass van het x4plus-model, daarna
+            // Lanczos naar het exacte doelformaat. Getest en bevestigd:
+            // dit binair stitcht de tegels verkeerd bij -s 2 — het beeld
+            // valt uiteen in verschoven tegelblokken, bij ELKE tegelgrootte
+            // (256 en auto fragmenteren, 512 loopt OOM). -s 4 is schoon.
+            // De "twee-traps" 2x-pass is daarom geen optie met dit binair.
+            // De generatieve-factor-gate voorkomt dat de bron voor dit 4x
+            // te klein is.
+            $passScale = 4;
 
             $passOutput = $tempDir . '/upscale_pass_' . uniqid() . '.png';
             $tempFiles[] = $passOutput;

@@ -49,13 +49,6 @@ return [
         // maar uitsmering/verzinsel — de echte fix is de bron op hogere
         // native resolutie genereren.
         'max_generative_factor' => 2.0,
-
-        // Plafond op de generatieve AI-pass (2 of 4). 4 = huidig gedrag.
-        // Op 2: "twee-traps" — een bescheiden generatieve 2x-stap en
-        // Lanczos voor de rest. Minder verzonnen textuur, iets zachter.
-        // Relevant zodra je max_generative_factor boven 2 zet en tóch de
-        // hallucinatie wilt beperken.
-        'max_ai_pass_scale' => 4,
         'models' => [
             'realesrgan-x4plus-anime' => 'Real-ESRGAN x4+ (Illustration/Poster)',
             'realesrgan-x4plus' => 'Real-ESRGAN x4+ (Photo-realistic)',
