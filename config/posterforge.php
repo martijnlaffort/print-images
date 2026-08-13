@@ -44,11 +44,18 @@ return [
         // op haar/vlechtwerk/geweven stof). ~2x ≈ bron-DPI 150 voor het
         // formaat (75% van de vlakte-pixels verzonnen). Formaten die méér
         // vragen worden NIET aangeboden en de upscale ervan wordt
-        // geweigerd. Verhoog dit bewust als je voor illustraties méér
-        // hallucinatie accepteert; verder opschalen geeft geen detail
-        // maar uitsmering/verzinsel — de echte fix is de bron op hogere
-        // native resolutie genereren.
-        'max_generative_factor' => 2.0,
+        // geweigerd.
+        //
+        // Op 5.0 voor de illustratie-focus: dit laat 70x100 toe voor
+        // ~2K-bronnen (factor ~4.9). Getest en visueel beoordeeld: voor
+        // geschilderde illustraties komt 70x100 dan schoon en artefact-vrij
+        // uit (printqc PASS, geen tegels/naden), alleen zacht — de
+        // kwaliteitsbewaking is dan printqc + een fysieke proefdruk, niet
+        // deze grens. LET OP: voor FOTO-realistisch materiaal met fijne
+        // echte textuur (haar/huid/water) gaat hoge-factor-verzinnen wel
+        // fout; verlaag dit dan richting 2.0. Duurzame fix blijft: bron op
+        // hogere native resolutie genereren.
+        'max_generative_factor' => 5.0,
         'models' => [
             'realesrgan-x4plus-anime' => 'Real-ESRGAN x4+ (Illustration/Poster)',
             'realesrgan-x4plus' => 'Real-ESRGAN x4+ (Photo-realistic)',
