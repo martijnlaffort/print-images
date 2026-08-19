@@ -91,6 +91,28 @@ class UpscaleImage implements ShouldQueue
                 'score' => $choice['score'],
                 'candidates' => $choice['candidates'],
             ]);
+        } else {
+            // Handmatige modus omzeilt de autotune-gate. Blokkeren doen we
+            // hier niet (de gebruiker koos deze instellingen bewust), maar
+            // een te hoge upscale-factor wél als waarschuwing vastleggen —
+            // anders komt er stilzwijgend een grotendeels verzonnen bestand
+            // uit.
+            try {
+                $gate = $autoTune->gate($this->poster->original_path, $this->targetSize);
+                if (! $gate['feasible']) {
+                    PosterActivity::log($this->poster->id, 'upscale_warning', [
+                        'reason' => sprintf(
+                            'Handmatige upscale boven de aanbevolen grens: %s cm, factor %.1fx (max %.1f), effectief %d DPI. Het resultaat kan grotendeels verzonnen/onscherp zijn — beoordeel een fysieke proef.',
+                            $this->targetSize,
+                            $gate['generative_factor'] ?? 0,
+                            $gate['max_generative_factor'] ?? 5.0,
+                            $gate['effective_dpi'] ?? 0,
+                        ),
+                    ]);
+                }
+            } catch (\Throwable) {
+                // Een mislukte gate-berekening mag de handmatige run niet blokkeren.
+            }
         }
 
         $outputFilename = $namingService->upscaledName($this->poster->slug);
