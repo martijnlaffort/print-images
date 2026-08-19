@@ -202,6 +202,34 @@ class Dashboard extends Component
         $this->detailPoster = null;
     }
 
+    /**
+     * Handmatig materiaal zetten (foto|illustratie). Bepaalt de
+     * generatieve-factor-grens; daarna de haalbare formaten herberekenen
+     * zodat de badges en de upscale-gate consistent blijven.
+     */
+    public function setMaterial(int $id, string $material): void
+    {
+        if (! in_array($material, ['photo', 'illustration'], true)) {
+            return;
+        }
+
+        $poster = Poster::find($id);
+        if (! $poster) {
+            return;
+        }
+
+        $poster->forceFill(['style_category' => $material])->save();
+
+        try {
+            $poster->refreshFeasibleSizes();
+        } catch (\Throwable) {
+            // Onleesbare bron mag de wijziging niet blokkeren.
+        }
+
+        \App\Models\PosterActivity::log($id, 'material_changed', ['material' => $material]);
+        $this->dispatch('toast', type: 'success', message: "Materiaal ingesteld: {$material}.");
+    }
+
     public function getDetailProperty(): ?array
     {
         if (! $this->detailPoster) {

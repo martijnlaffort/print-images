@@ -50,16 +50,23 @@ return [
         // vragen worden NIET aangeboden en de upscale ervan wordt
         // geweigerd.
         //
-        // Op 5.0 voor de illustratie-focus: dit laat 70x100 toe voor
-        // ~2K-bronnen (factor ~4.9). Getest en visueel beoordeeld: voor
-        // geschilderde illustraties komt 70x100 dan schoon en artefact-vrij
-        // uit (printqc PASS, geen tegels/naden), alleen zacht — de
-        // kwaliteitsbewaking is dan printqc + een fysieke proefdruk, niet
-        // deze grens. LET OP: voor FOTO-realistisch materiaal met fijne
-        // echte textuur (haar/huid/water) gaat hoge-factor-verzinnen wel
-        // fout; verlaag dit dan richting 2.0. Duurzame fix blijft: bron op
+        // PER MATERIAAL: illustraties (schilderkunstig) verdragen een hoge
+        // factor — 70x100 uit een ~2K-bron (factor ~4.9) komt schoon en
+        // artefact-vrij uit (getest; printqc PASS, alleen zacht). Foto's
+        // met fijne echte textuur (haar/huid/water) gaan bij hoge factor
+        // wél de mist in, dus een strengere grens (~2x). Het materiaal
+        // wordt per poster gezet (default = illustratie; handmatig te
+        // wijzigen in de posterdetails). Een scalar mag ook nog (dan geldt
+        // die voor alles). Duurzame fix voor scherpte blijft: bron op
         // hogere native resolutie genereren.
-        'max_generative_factor' => 5.0,
+        'max_generative_factor' => [
+            'photo' => 2.0,
+            'illustration' => 5.0,
+        ],
+        // Gebruikt als een materiaal niet in de map staat.
+        'max_generative_factor_default' => 5.0,
+        // Materiaal voor posters zonder expliciet label (shop = illustraties).
+        'default_material' => 'illustration',
         // Alle modellen draaien op realesrgan-ncnn-vulkan (.param/.bin in
         // bin/win/models). De 4x* modellen zijn van Phhofm (CC-BY 4.0,
         // commercieel toegestaan mét naamsvermelding — zie 'credits').

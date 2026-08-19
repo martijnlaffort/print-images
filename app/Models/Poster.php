@@ -101,6 +101,19 @@ class Poster extends Model
         }
     }
 
+    /**
+     * Materiaal van dit ontwerp ('photo'|'illustration'). Bepaalt de
+     * generatieve-factor-grens (foto strenger dan illustratie). Handmatig
+     * gezet via style_category; ongelabeld = de shop-default. Bewust geen
+     * automatische detectie — die bleek onbetrouwbaar op dit materiaal
+     * (schilderkunstige illustraties meten niet vlakker dan foto's).
+     */
+    public function material(): string
+    {
+        return $this->style_category
+            ?? (string) config('posterforge.upscale.default_material', 'illustration');
+    }
+
     public function refreshFeasibleSizes(): array
     {
         $info = @getimagesize($this->original_path);
@@ -109,7 +122,7 @@ class Poster extends Model
         }
 
         $sizes = app(\App\Services\DpiValidator::class)
-            ->feasibilityFor((int) $info[0], (int) $info[1]);
+            ->feasibilityFor((int) $info[0], (int) $info[1], $this->material());
 
         $this->forceFill(['feasible_sizes' => $sizes])->save();
 

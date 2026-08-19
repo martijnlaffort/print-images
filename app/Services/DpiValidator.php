@@ -66,6 +66,28 @@ class DpiValidator
     }
 
     /**
+     * Bovengrens op de generatieve upscale-factor voor een materiaal
+     * ('photo'|'illustration'|null). Accepteert de per-materiaal map óf
+     * een scalar-config (oude vorm) — onbekend/leeg materiaal valt terug
+     * op de default. Eén plek zodat gate en feasibility identiek resolven.
+     */
+    public static function maxGenerativeFactorFor(?string $material): float
+    {
+        $cfg = config('posterforge.upscale.max_generative_factor', 5.0);
+        $default = (float) config('posterforge.upscale.max_generative_factor_default', 5.0);
+
+        if (! is_array($cfg)) {
+            return (float) $cfg; // backward-compat: scalar geldt voor alles
+        }
+
+        if ($material !== null && isset($cfg[$material])) {
+            return (float) $cfg[$material];
+        }
+
+        return $default;
+    }
+
+    /**
      * Haalbaarheid per printformaat voor een bron. Twee eisen:
      *  1) genoeg output-resolutie: effectieve DPI na een 4x AI-pass
      *     >= autotune.min_dpi (ideaal >= qc.dpi.ideal);
@@ -74,11 +96,11 @@ class DpiValidator
      *     boven ~2x hallucineert het de textuur).
      * Een formaat wordt alleen aangeboden als aan BEIDE is voldaan.
      */
-    public function feasibilityFor(int $pixelW, int $pixelH): array
+    public function feasibilityFor(int $pixelW, int $pixelH, ?string $material = null): array
     {
         $ideal = (int) config('posterforge.qc.dpi.ideal', 300);
         $minimum = (int) config('posterforge.autotune.min_dpi', 200);
-        $maxFactor = (float) config('posterforge.upscale.max_generative_factor', 2.0);
+        $maxFactor = self::maxGenerativeFactorFor($material);
 
         $result = [];
         foreach (config('posterforge.qc.sizes', []) as $size) {

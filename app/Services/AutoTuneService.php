@@ -38,11 +38,11 @@ class AutoTuneService
      * detail maar uitsmering/verzinsel). Geen enkele instelling lost
      * ontbrekende bronpixels op.
      */
-    public function gate(string $sourcePath, string $targetSize): array
+    public function gate(string $sourcePath, string $targetSize, ?string $material = null): array
     {
         [$w, $h] = $this->dimensions($sourcePath);
         $minDpi = (int) config('posterforge.autotune.min_dpi', 200);
-        $maxFactor = (float) config('posterforge.upscale.max_generative_factor', 2.0);
+        $maxFactor = DpiValidator::maxGenerativeFactorFor($material);
 
         $dpi = $this->dpiValidator->effectiveDpiFor($w * 4, $h * 4, $targetSize);
         if (! $dpi) {
@@ -69,6 +69,7 @@ class AutoTuneService
             'min_dpi' => $minDpi,
             'generative_factor' => $factor,
             'max_generative_factor' => $maxFactor,
+            'material' => $material,
             'max_sellable_size' => $maxSellable,
         ];
     }

@@ -244,7 +244,7 @@ class ProcessPipeline implements ShouldQueue
         if ($cfg['auto'] ?? false) {
             $autoTune = app(\App\Services\AutoTuneService::class);
 
-            $gate = $autoTune->gate($poster->original_path, $cfg['targetSize']);
+            $gate = $autoTune->gate($poster->original_path, $cfg['targetSize'], $poster->material());
             if (! $gate['feasible']) {
                 // Eerlijk weigeren zonder de hele batch te laten stranden.
                 PosterActivity::log($poster->id, 'upscale_geweigerd', [

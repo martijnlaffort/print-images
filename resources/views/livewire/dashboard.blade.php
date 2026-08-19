@@ -459,6 +459,38 @@
                     </div>
                 </div>
 
+                {{-- Materiaal (bepaalt de generatieve-factor-grens) --}}
+                <div class="border-b px-6 py-4">
+                    <h3 class="text-sm font-semibold text-gray-900 mb-2">Materiaal</h3>
+                    <div class="flex rounded-lg bg-gray-100 p-0.5 text-xs font-medium w-fit">
+                        <button wire:click="setMaterial({{ $dp->id }}, 'illustration')"
+                            class="rounded-md px-3 py-1 {{ $dp->style_category === 'illustration' ? 'bg-white shadow text-gray-900' : 'text-gray-500 hover:text-gray-700' }}">
+                            Illustratie (max {{ \App\Services\DpiValidator::maxGenerativeFactorFor('illustration') }}x)
+                        </button>
+                        <button wire:click="setMaterial({{ $dp->id }}, 'photo')"
+                            class="rounded-md px-3 py-1 {{ $dp->style_category === 'photo' ? 'bg-white shadow text-gray-900' : 'text-gray-500 hover:text-gray-700' }}">
+                            Foto (max {{ \App\Services\DpiValidator::maxGenerativeFactorFor('photo') }}x)
+                        </button>
+                    </div>
+                    <p class="mt-1.5 text-xs text-gray-400">
+                        @if($dp->style_category)
+                            Bepaalt de upscale-factor-grens en dus welke formaten haalbaar zijn.
+                        @else
+                            Nog niet ingesteld &mdash; gebruikt de default (illustratie). Zet op &lsquo;foto&rsquo; voor een strengere grens.
+                        @endif
+                    </p>
+                    @if(!empty($dp->feasible_sizes))
+                        <p class="mt-2 flex flex-wrap gap-1">
+                            @foreach($dp->feasible_sizes as $sizeName => $row)
+                                <span
+                                    class="rounded px-1 text-[10px] font-medium {{ $row['status'] === 'ideal' ? 'bg-green-100 text-green-700' : ($row['status'] === 'acceptable' ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-400 line-through') }}"
+                                    title="{{ $row['effective_dpi'] }} DPI na AI &middot; factor {{ $row['generative_factor'] ?? '?' }}x{{ $row['aanbieden'] ? '' : ' — niet aanbieden' }}"
+                                >{{ $sizeName }}</span>
+                            @endforeach
+                        </p>
+                    @endif
+                </div>
+
                 {{-- QC --}}
                 @php($qcReport = $dp->latestQcReport())
                 <div class="border-b px-6 py-4">

@@ -60,7 +60,7 @@ class UpscaleImage implements ShouldQueue
         // ── Automatische modus: formaat-gating + configuratie-keuze per afbeelding ──
         if ($this->auto) {
             $this->progress($bgTask, 'autotune-gating', 2);
-            $gate = $autoTune->gate($this->poster->original_path, $this->targetSize);
+            $gate = $autoTune->gate($this->poster->original_path, $this->targetSize, $this->poster->material());
 
             if (! $gate['feasible']) {
                 throw new \RuntimeException(sprintf(
@@ -98,7 +98,7 @@ class UpscaleImage implements ShouldQueue
             // anders komt er stilzwijgend een grotendeels verzonnen bestand
             // uit.
             try {
-                $gate = $autoTune->gate($this->poster->original_path, $this->targetSize);
+                $gate = $autoTune->gate($this->poster->original_path, $this->targetSize, $this->poster->material());
                 if (! $gate['feasible']) {
                     PosterActivity::log($this->poster->id, 'upscale_warning', [
                         'reason' => sprintf(
