@@ -1,0 +1,4 @@
+bin/win/models/*.bin filter=lfs diff=lfs merge=lfs -text
+# ncnn .param zijn tekstueel maar EOL-conversie kan de parser breken op een
+# verse checkout — als binair behandelen zodat ze onaangetast blijven.
+bin/win/models/*.param -text
