@@ -16,7 +16,7 @@ class UpscaleQueue extends Component
     public bool $auto = true;
     public string $targetSize = '70x100';
     public int $targetDpi = 300;
-    public string $model = 'realesrgan-x4plus';
+    public string $model = '4xNomos8kSC';
     public bool $preDenoise = false;
     public string $preDenoiseStrength = 'light';
     public int $denoise = 0;

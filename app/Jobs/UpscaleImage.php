@@ -27,7 +27,7 @@ class UpscaleImage implements ShouldQueue
         public Poster $poster,
         public string $targetSize = '70x100',
         public int $targetDpi = 300,
-        public string $model = 'realesrgan-x4plus',
+        public string $model = '4xNomos8kSC',
         public int $denoise = 0,
         public int $sharpen = 20,
         public array $colorAdjust = [],

@@ -12,7 +12,11 @@ return [
     'upscale' => [
         'default_target_size' => '70x100',
         'default_scale' => 4,
-        'default_model' => 'realesrgan-x4plus',
+        // 4xNomos8kSC (Phhofm, CC-BY) getest als beste allrounder voor
+        // jouw materiaal: duidelijk scherper dan x4plus op textuur (foto's,
+        // impasto-illustraties), gelijk op vlakke illustraties. Attributie:
+        // zie 'credits' onderaan deze config.
+        'default_model' => '4xNomos8kSC',
         // Bicubic-blend ("AI-blend") = de generatieve-sterkte-demper: het
         // percentage bicubic (interpolatie) dat over de AI-output wordt
         // gemengd. Hoger = minder verzonnen textuur (en zachter). 0 volgens
@@ -56,16 +60,36 @@ return [
         // fout; verlaag dit dan richting 2.0. Duurzame fix blijft: bron op
         // hogere native resolutie genereren.
         'max_generative_factor' => 5.0,
+        // Alle modellen draaien op realesrgan-ncnn-vulkan (.param/.bin in
+        // bin/win/models). De 4x* modellen zijn van Phhofm (CC-BY 4.0,
+        // commercieel toegestaan mét naamsvermelding — zie 'credits').
         'models' => [
-            'realesrgan-x4plus-anime' => 'Real-ESRGAN x4+ (Illustration/Poster)',
-            'realesrgan-x4plus' => 'Real-ESRGAN x4+ (Photo-realistic)',
-            'realesr-animevideov3' => 'Real-ESRGAN AnimeVideo v3 (licht, snel)',
+            '4xNomos8kSC' => '4x Nomos8kSC — foto, scherp (standaard)',
+            '4xLSDIRplusC' => '4x LSDIRplusC — foto, maximaal detail',
+            '4xLSDIR' => '4x LSDIR — foto, scherp',
+            '4xLSDIRCompactC3' => '4x LSDIR Compact — sneller/lichter',
+            'realesrgan-x4plus' => 'Real-ESRGAN x4+ — zacht, schoonst op gladde vlakken (water/lucht)',
+            'realesrgan-x4plus-anime' => 'Real-ESRGAN x4+ Anime — vlakke illustratie',
+            'realesr-animevideov3' => 'Real-ESRGAN AnimeVideo v3 — licht, snel',
         ],
     ],
 
     'export' => [
         'default_quality' => 92,
         'default_format' => 'png',
+    ],
+
+    /*
+     * Verplichte naamsvermelding voor de gebruikte upscale-modellen.
+     * De 4x*-modellen staan onder CC BY 4.0: commercieel gebruik is
+     * toegestaan MITS de maker wordt vermeld. Deze lijst wordt getoond op
+     * de Instellingen-pagina (credits) — verwijder de vermelding niet.
+     */
+    'credits' => [
+        'models' => [
+            '4xNomos8kSC / 4xLSDIR / 4xLSDIRplusC / 4xLSDIRCompactC3 — © Philip Hofmann (Phhofm), CC BY 4.0 (github.com/Phhofm/models)',
+            'Real-ESRGAN (x4plus, AnimeVideo v3) — © Xintao Wang e.a., BSD-3-Clause',
+        ],
     ],
 
     'denoise' => [
@@ -216,14 +240,14 @@ return [
         'blocks' => ['detail_count' => 8, 'edge_count' => 8, 'noise_count' => 30],
 
         // Kandidaat-configuraties voor de mini-benchmark per afbeelding.
-        // Shortlist = de top van benchmark-run 20260721_081725 (testset 3 bronnen):
-        // pre-denoise 'light' verloor consequent en is daarom geschrapt.
+        // Bake-off 2026-08 (foto + illustraties): 4xNomos8kSC en
+        // 4xLSDIRplusC (Phhofm, CC-BY) winnen op textuur; x4plus blijft
+        // kandidaat omdat het op grote gladde vlakken (water/lucht) de
+        // minste korrel geeft. Autotune kiest per beeld de beste.
         'candidates' => [
+            ['model' => '4xNomos8kSC', 'pre_denoise' => 'off', 'blend_bicubic' => 0, 'sharpen' => 20],
+            ['model' => '4xLSDIRplusC', 'pre_denoise' => 'off', 'blend_bicubic' => 0, 'sharpen' => 20],
             ['model' => 'realesrgan-x4plus', 'pre_denoise' => 'off', 'blend_bicubic' => 0, 'sharpen' => 20],
-            ['model' => 'realesrgan-x4plus', 'pre_denoise' => 'off', 'blend_bicubic' => 25, 'sharpen' => 20],
-            ['model' => 'realesrgan-x4plus', 'pre_denoise' => 'off', 'blend_bicubic' => 25, 'sharpen' => 0],
-            ['model' => 'realesrgan-x4plus-anime', 'pre_denoise' => 'off', 'blend_bicubic' => 25, 'sharpen' => 20],
-            ['model' => 'realesr-animevideov3', 'pre_denoise' => 'off', 'blend_bicubic' => 0, 'sharpen' => 20],
         ],
 
         // null = gebruik benchmark.weights.

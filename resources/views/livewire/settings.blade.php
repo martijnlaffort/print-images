@@ -140,5 +140,16 @@
             @error('newSizeWidth') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
             @error('newSizeHeight') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
         </div>
+
+        {{-- Modellen & licenties (attributie — verplicht bij CC-BY) --}}
+        <div class="rounded-lg bg-white border border-gray-200 p-6">
+            <h2 class="text-lg font-semibold text-gray-900 mb-2">Modellen &amp; licenties</h2>
+            <p class="text-xs text-gray-500 mb-3">De AI-upscale-modellen worden gebruikt onder hun licentie. Naamsvermelding is verplicht (CC BY 4.0) &mdash; laat deze staan.</p>
+            <ul class="space-y-1 text-sm text-gray-700 list-disc pl-5">
+                @foreach(config('posterforge.credits.models', []) as $line)
+                    <li>{{ $line }}</li>
+                @endforeach
+            </ul>
+        </div>
     </div>
 </div>
